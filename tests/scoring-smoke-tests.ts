@@ -33,7 +33,7 @@ import {
 } from "../lib/workspace";
 import { mapLiveFixtureRow, type LiveFixtureRow } from "../lib/liveFixtures";
 import { getLiveFixtureStaleCutoffIso, summariseLiveFixtureRows } from "../lib/liveFixtureMaintenance";
-import { auditFixtureEvidence, summariseEvidenceAudits } from "../lib/evidenceAudit";
+import { auditFixtureEvidence, describeFixtureSource, summariseEvidenceAudits } from "../lib/evidenceAudit";
 
 function assertBetween(value: number, min: number, max: number, label: string) {
   assert.ok(
@@ -404,6 +404,21 @@ function runEvidenceAuditSmokeTests() {
   assert.ok(summary.averageCompleteness > 0);
   assert.ok(summary.incompleteFixtures >= 1);
   assert.ok(summary.fixturesNeedingAttention.some((audit) => audit.fixtureId === blank.id));
+
+  // Every ID pattern actually produced by each fixture-creation pipeline, so a
+  // future pipeline whose prefix isn't recognised here fails loudly instead of
+  // silently collapsing into "Workspace/sample fixture".
+  assert.equal(describeFixtureSource("fixture-1720000000000"), "Manual/generated fixture");
+  assert.equal(
+    describeFixtureSource("generated-1720000000000-001-arsenal-vs-chelsea"),
+    "Manual/generated fixture",
+  );
+  assert.equal(
+    describeFixtureSource("csv-arsenal-chelsea-2-1720000000000"),
+    "CSV-imported fixture",
+  );
+  assert.equal(describeFixtureSource("540289"), "Live fixture cache");
+  assert.equal(describeFixtureSource("ars-cov"), "Workspace/sample fixture");
 }
 
 function runLiveFixtureMaintenanceSmokeTests() {

@@ -228,6 +228,27 @@ function auditResult(fixture: Fixture): EvidenceGateAudit {
   };
 }
 
+// IDs are stamped by whichever pipeline created the fixture:
+//   createBlankFixture (manual "Add Fixture")     -> fixture-<timestamp>
+//   generateRoundRobinFixtures (P20 generator)     -> generated-<timestamp>-<index>-<slug>
+//   importFixturesFromCsv (P19 CSV import)         -> csv-<home>-<away>-<row>-<timestamp>
+//   football-data.org live fixtures (P21)          -> the raw numeric match id, e.g. "540289"
+//   anything else (untouched lib/sampleData.ts)    -> hand-written ids like "ars-cov"
+// The generator's "generated-" prefix was previously unmatched here and fell through
+// to "Workspace/sample fixture", indistinguishable from genuinely untouched sample data.
+export function describeFixtureSource(fixtureId: string): string {
+  if (fixtureId.startsWith("fixture-") || fixtureId.startsWith("generated-")) {
+    return "Manual/generated fixture";
+  }
+  if (fixtureId.startsWith("csv-")) {
+    return "CSV-imported fixture";
+  }
+  if (/^\d+$/.test(fixtureId)) {
+    return "Live fixture cache";
+  }
+  return "Workspace/sample fixture";
+}
+
 export function auditFixtureEvidence(fixture: Fixture): FixtureEvidenceAudit {
   const gates = [
     auditQuality(fixture),
@@ -248,13 +269,7 @@ export function auditFixtureEvidence(fixture: Fixture): FixtureEvidenceAudit {
     .filter((gate) => gate.status === "partial")
     .map((gate) => `${gate.gateName}: ${gate.missing[0] ?? "partial evidence"}`);
   const status = blockers.length > 0 || completenessScore < 60 ? "incomplete" : warnings.length > 0 || completenessScore < 85 ? "review" : "ready";
-  const sourceSummary = fixture.id.startsWith("fixture-")
-    ? "Manual/generated fixture"
-    : fixture.id.startsWith("csv-")
-      ? "CSV-imported fixture"
-      : /^\d+$/.test(fixture.id)
-        ? "Live fixture cache"
-        : "Workspace/sample fixture";
+  const sourceSummary = describeFixtureSource(fixture.id);
 
   return {
     fixtureId: fixture.id,
