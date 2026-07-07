@@ -36,6 +36,7 @@ import { RoundManagement } from "../components/RoundManagement";
 import { WorkspacePersistencePanel, CloudSyncPanel, FixtureCsvPanel, FixtureAutomationPanel, LiveFixturesPanel, LiveFixtureMaintenancePanel, type LiveFixtureAdminStatus } from "../components/WorkspacePanels";
 import { AccuracyDashboard, EvidenceReadinessPanel, LeaderboardPanel, RuleLearningPanel, RuleWeightTuningPanel } from "../components/DashboardPanels";
 import { PredictionSummaryPanel, FixtureDetailsPanel, EntrantsPicksPanel, ResultInputsPanel } from "../components/FixturePanels";
+import { QuickPredictionPanel } from "../components/QuickPredictionPanel";
 import { TeamStrengthInputsPanel, RecentFormInputsPanel, AvailabilityInputsPanel, ContextInputsPanel, OddsInputsPanel, GateEvidencePanels, ManualGateInputsPanel, PredictionGatesPanel } from "../components/EvidenceInputPanels";
 import {
   ALL_ROUNDS,
@@ -55,7 +56,7 @@ import { fetchLiveFixtures } from "../lib/liveFixtures";
 import { auditFixtureEvidence, summariseEvidenceAudits } from "../lib/evidenceAudit";
 
 export default function Home() {
-  type WorkspaceTab = "tip" | "evidence" | "data" | "analytics";
+  type WorkspaceTab = "tip" | "evidence" | "data" | "analytics" | "competition";
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("tip");
   const [fixtures, setFixtures] = useState<Fixture[]>(() => cloneFixtures(initialFixtures));
   const [activeFixtureId, setActiveFixtureId] = useState(fixtures[0]?.id ?? "");
@@ -653,10 +654,10 @@ export default function Home() {
     <main className="container">
       <section className="header">
         <div>
-          <div className="eyebrow">Tipping Gates App · P23.2</div>
+          <div className="eyebrow">Tipping Gates App · P23</div>
           <h1>Evidence-based tipping gates with evidence readiness audits.</h1>
           <p className="lead">
-            P23.2 adds a tabbed workspace layout on top of the evidence readiness audit, with P23.1 source-label fixes included for generated fixtures.
+            P23 adds fixture-level evidence completeness checks, source/readiness summaries and missing-input warnings so imported, generated and manual fixtures can be reviewed before tips are trusted.
           </p>
         </div>
         <button className="primary" onClick={addBlankFixture}>Add Fixture</button>
@@ -687,6 +688,9 @@ export default function Home() {
         <button className={activeTab === "analytics" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("analytics")}>
           Analytics &amp; Admin
         </button>
+        <button className={activeTab === "competition" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("competition")}>
+          Competition
+        </button>
       </nav>
 
       <section className="grid">
@@ -701,6 +705,12 @@ export default function Home() {
         <div>
           {activeTab === "tip" && (
             <>
+              <QuickPredictionPanel
+                fixtures={fixtures}
+                activeFixture={activeFixture}
+                result={result}
+                onMatchupFound={setActiveFixtureId}
+              />
               <PredictionSummaryPanel
                 fixture={activeFixture}
                 result={result}
@@ -714,15 +724,6 @@ export default function Home() {
                 evidenceAudit={activeEvidenceAudit}
               />
               <FixtureDetailsPanel fixture={activeFixture} onUpdateField={updateFixtureField} />
-              <EntrantsPicksPanel
-                fixture={activeFixture}
-                entrants={entrants}
-                userTips={userTips}
-                accuracy={accuracy}
-                onUpdateEntrantName={updateEntrantName}
-                onUpdateUserTip={updateUserTip}
-                onAddEntrant={addEntrant}
-              />
               <ResultInputsPanel fixture={activeFixture} accuracy={accuracy} onUpdateMatchResult={updateMatchResult} />
               <PredictionGatesPanel result={result} />
             </>
@@ -819,7 +820,6 @@ export default function Home() {
                 summary={evidenceAuditSummary}
                 selectedRoundLabel={selectedRoundLabel}
               />
-              <LeaderboardPanel leaderboard={leaderboard} selectedRoundLabel={selectedRoundLabel} />
               <RuleLearningPanel ruleLearning={ruleLearning} />
               <RuleWeightTuningPanel
                 ruleWeights={ruleWeights}
@@ -828,6 +828,21 @@ export default function Home() {
                 onUpdateWeight={updateRuleWeight}
                 onResetWeights={resetRuleWeights}
               />
+            </>
+          )}
+
+          {activeTab === "competition" && (
+            <>
+              <EntrantsPicksPanel
+                fixture={activeFixture}
+                entrants={entrants}
+                userTips={userTips}
+                accuracy={accuracy}
+                onUpdateEntrantName={updateEntrantName}
+                onUpdateUserTip={updateUserTip}
+                onAddEntrant={addEntrant}
+              />
+              <LeaderboardPanel leaderboard={leaderboard} selectedRoundLabel={selectedRoundLabel} />
             </>
           )}
         </div>

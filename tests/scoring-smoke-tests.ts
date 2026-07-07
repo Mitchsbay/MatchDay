@@ -34,6 +34,12 @@ import {
 import { mapLiveFixtureRow, type LiveFixtureRow } from "../lib/liveFixtures";
 import { getLiveFixtureStaleCutoffIso, summariseLiveFixtureRows } from "../lib/liveFixtureMaintenance";
 import { auditFixtureEvidence, describeFixtureSource, summariseEvidenceAudits } from "../lib/evidenceAudit";
+import {
+  findFixtureForMatchup,
+  getAvailableCompetitions,
+  getAwayTeamsForMatchup,
+  getHomeTeamsForCompetition,
+} from "../lib/quickPrediction";
 
 function assertBetween(value: number, min: number, max: number, label: string) {
   assert.ok(
@@ -421,6 +427,30 @@ function runEvidenceAuditSmokeTests() {
   assert.equal(describeFixtureSource("ars-cov"), "Workspace/sample fixture");
 }
 
+function runQuickPredictionSmokeTests() {
+  const competitions = getAvailableCompetitions(fixtures);
+  assert.ok(competitions.includes("Example League"));
+
+  const homeTeams = getHomeTeamsForCompetition(fixtures, "Example League");
+  assert.ok(homeTeams.includes("Arsenal"));
+  assert.ok(homeTeams.includes("Everton"));
+  assert.ok(homeTeams.includes("Brighton"));
+
+  const awayTeams = getAwayTeamsForMatchup(fixtures, "Example League", "Arsenal");
+  assert.deepEqual(awayTeams, ["Coventry"]);
+
+  const match = findFixtureForMatchup(fixtures, "Example League", "Arsenal", "Coventry");
+  assert.ok(match, "should find the Arsenal vs Coventry sample fixture");
+  assert.equal(match?.id, "ars-cov");
+
+  const noMatch = findFixtureForMatchup(fixtures, "Example League", "Arsenal", "Everton");
+  assert.equal(noMatch, undefined, "Arsenal have never played Everton at home in the sample data");
+
+  // A competition/team combination with no fixtures at all should return an
+  // empty list rather than throwing, since this drives dropdown population.
+  assert.deepEqual(getHomeTeamsForCompetition(fixtures, "Nonexistent League"), []);
+}
+
 function runLiveFixtureMaintenanceSmokeTests() {
   const now = new Date("2026-07-08T00:00:00.000Z");
   const cutoff = getLiveFixtureStaleCutoffIso(now, 14);
@@ -454,5 +484,6 @@ runFixtureAutomationSmokeTests();
 runWorkspaceBatchAndLiveFixturesSmokeTests();
 runEvidenceAuditSmokeTests();
 runLiveFixtureMaintenanceSmokeTests();
+runQuickPredictionSmokeTests();
 
-console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, fixture automation, live fixtures mapping, evidence audit and live fixture maintenance.");
+console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance and quick prediction dropdowns.");
