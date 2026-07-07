@@ -55,6 +55,8 @@ import { fetchLiveFixtures } from "../lib/liveFixtures";
 import { auditFixtureEvidence, summariseEvidenceAudits } from "../lib/evidenceAudit";
 
 export default function Home() {
+  type WorkspaceTab = "tip" | "evidence" | "data" | "analytics";
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("tip");
   const [fixtures, setFixtures] = useState<Fixture[]>(() => cloneFixtures(initialFixtures));
   const [activeFixtureId, setActiveFixtureId] = useState(fixtures[0]?.id ?? "");
   const [selectedRound, setSelectedRound] = useState<string>(ALL_ROUNDS);
@@ -671,6 +673,22 @@ export default function Home() {
         onSelectRound={updateSelectedRound}
       />
 
+      <nav className="workspace-tabs">
+        <button className={activeTab === "tip" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("tip")}>
+          Tip Now
+        </button>
+        <button className={activeTab === "evidence" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("evidence")}>
+          Evidence{" "}
+          <span className="workspace-tab-badge">{activeEvidenceAudit.completenessScore}%</span>
+        </button>
+        <button className={activeTab === "data" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("data")}>
+          Data &amp; Import
+        </button>
+        <button className={activeTab === "analytics" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("analytics")}>
+          Analytics &amp; Admin
+        </button>
+      </nav>
+
       <section className="grid">
         <FixtureList
           activeFixtureId={activeFixture.id}
@@ -681,118 +699,137 @@ export default function Home() {
         />
 
         <div>
-          <WorkspacePersistencePanel
-            storageMessage={storageMessage}
-            lastSavedAt={lastSavedAt}
-            fixtureCount={fixtures.length}
-            onExportBackup={exportWorkspaceBackup}
-            onImportBackup={importWorkspaceBackup}
-            onResetSamples={resetWorkspaceToSamples}
-          />
-          <FixtureAutomationPanel
-            automationMessage={automationMessage}
-            onGenerateFixtures={generateAutomatedFixtures}
-          />
-          <LiveFixturesPanel
-            liveFixturesMessage={liveFixturesMessage}
-            isLoadingLiveFixtures={isLoadingLiveFixtures}
-            onFetchLiveFixtures={loadLiveFixtures}
-          />
-          <LiveFixtureMaintenancePanel
-            adminSecret={liveFixtureAdminSecret}
-            adminMessage={liveFixtureAdminMessage}
-            adminStatus={liveFixtureAdminStatus}
-            isAdminBusy={isLiveFixtureAdminBusy}
-            onAdminSecretChange={setLiveFixtureAdminSecret}
-            onCheckStatus={() => runLiveFixtureAdminAction("status")}
-            onRefreshNow={() => runLiveFixtureAdminAction("refresh")}
-            onCleanupOldFixtures={() => runLiveFixtureAdminAction("cleanup")}
-          />
-          <FixtureCsvPanel
-            csvMessage={csvMessage}
-            onExportCsv={exportFixturesCsv}
-            onImportCsv={importFixturesCsv}
-          />
-          <CloudSyncPanel
-            authEmail={authEmail}
-            authMessage={authMessage}
-            activeUserEmail={activeUserEmail}
-            cloudWorkspaceId={cloudWorkspaceId}
-            cloudMessage={cloudMessage}
-            isCloudBusy={isCloudBusy || isAuthBusy || !hasSupabaseConfig}
-            isSignedIn={Boolean(session)}
-            onAuthEmailChange={setAuthEmail}
-            onSendMagicLink={sendMagicLink}
-            onSignOut={signOutOfSupabase}
-            onCloudWorkspaceIdChange={setCloudWorkspaceId}
-            onSaveCloud={saveWorkspaceToCloud}
-            onLoadCloud={loadWorkspaceFromCloud}
-            onNewCloudId={createNewCloudWorkspaceId}
-          />
-          <AccuracyDashboard
-            accuracySummary={accuracySummary}
-            selectedRoundAccuracySummary={selectedRoundAccuracySummary}
-            selectedRoundLabel={selectedRoundLabel}
-          />
-          <EvidenceReadinessPanel
-            summary={evidenceAuditSummary}
-            selectedRoundLabel={selectedRoundLabel}
-          />
-          <LeaderboardPanel leaderboard={leaderboard} selectedRoundLabel={selectedRoundLabel} />
-          <RuleLearningPanel ruleLearning={ruleLearning} />
-          <RuleWeightTuningPanel
-            ruleWeights={ruleWeights}
-            quality={quality}
-            conflict={conflict}
-            onUpdateWeight={updateRuleWeight}
-            onResetWeights={resetRuleWeights}
-          />
-          <PredictionSummaryPanel
-            fixture={activeFixture}
-            result={result}
-            quality={quality}
-            form={form}
-            availability={availability}
-            context={context}
-            odds={odds}
-            conflict={conflict}
-            accuracy={accuracy}
-            evidenceAudit={activeEvidenceAudit}
-          />
-          <FixtureDetailsPanel fixture={activeFixture} onUpdateField={updateFixtureField} />
-          <EntrantsPicksPanel
-            fixture={activeFixture}
-            entrants={entrants}
-            userTips={userTips}
-            accuracy={accuracy}
-            onUpdateEntrantName={updateEntrantName}
-            onUpdateUserTip={updateUserTip}
-            onAddEntrant={addEntrant}
-          />
-          <ResultInputsPanel fixture={activeFixture} accuracy={accuracy} onUpdateMatchResult={updateMatchResult} />
-          <TeamStrengthInputsPanel fixture={activeFixture} onUpdateStats={updateStats} />
-          <RecentFormInputsPanel fixture={activeFixture} onUpdateRecentForm={updateRecentForm} />
-          <AvailabilityInputsPanel fixture={activeFixture} onUpdateMissingPlayer={updateMissingPlayer} />
-          <ContextInputsPanel
-            fixture={activeFixture}
-            onUpdateTeamContext={updateTeamContext}
-            onUpdateMatchContext={updateMatchContext}
-          />
-          <GateEvidencePanels
-            quality={quality}
-            form={form}
-            availability={availability}
-            context={context}
-            odds={odds}
-            conflict={conflict}
-          />
-          <OddsInputsPanel fixture={activeFixture} onUpdateOddsMarket={updateOddsMarket} />
-          <ManualGateInputsPanel
-            scores={activeFixture.scores}
-            onUpdateScore={updateScore}
-            onResetFixture={resetFixture}
-          />
-          <PredictionGatesPanel result={result} />
+          {activeTab === "tip" && (
+            <>
+              <PredictionSummaryPanel
+                fixture={activeFixture}
+                result={result}
+                quality={quality}
+                form={form}
+                availability={availability}
+                context={context}
+                odds={odds}
+                conflict={conflict}
+                accuracy={accuracy}
+                evidenceAudit={activeEvidenceAudit}
+              />
+              <FixtureDetailsPanel fixture={activeFixture} onUpdateField={updateFixtureField} />
+              <EntrantsPicksPanel
+                fixture={activeFixture}
+                entrants={entrants}
+                userTips={userTips}
+                accuracy={accuracy}
+                onUpdateEntrantName={updateEntrantName}
+                onUpdateUserTip={updateUserTip}
+                onAddEntrant={addEntrant}
+              />
+              <ResultInputsPanel fixture={activeFixture} accuracy={accuracy} onUpdateMatchResult={updateMatchResult} />
+              <PredictionGatesPanel result={result} />
+            </>
+          )}
+
+          {activeTab === "evidence" && (
+            <>
+              <TeamStrengthInputsPanel fixture={activeFixture} onUpdateStats={updateStats} />
+              <RecentFormInputsPanel fixture={activeFixture} onUpdateRecentForm={updateRecentForm} />
+              <AvailabilityInputsPanel fixture={activeFixture} onUpdateMissingPlayer={updateMissingPlayer} />
+              <ContextInputsPanel
+                fixture={activeFixture}
+                onUpdateTeamContext={updateTeamContext}
+                onUpdateMatchContext={updateMatchContext}
+              />
+              <GateEvidencePanels
+                quality={quality}
+                form={form}
+                availability={availability}
+                context={context}
+                odds={odds}
+                conflict={conflict}
+              />
+              <OddsInputsPanel fixture={activeFixture} onUpdateOddsMarket={updateOddsMarket} />
+              <ManualGateInputsPanel
+                scores={activeFixture.scores}
+                onUpdateScore={updateScore}
+                onResetFixture={resetFixture}
+              />
+            </>
+          )}
+
+          {activeTab === "data" && (
+            <>
+              <WorkspacePersistencePanel
+                storageMessage={storageMessage}
+                lastSavedAt={lastSavedAt}
+                fixtureCount={fixtures.length}
+                onExportBackup={exportWorkspaceBackup}
+                onImportBackup={importWorkspaceBackup}
+                onResetSamples={resetWorkspaceToSamples}
+              />
+              <FixtureAutomationPanel
+                automationMessage={automationMessage}
+                onGenerateFixtures={generateAutomatedFixtures}
+              />
+              <LiveFixturesPanel
+                liveFixturesMessage={liveFixturesMessage}
+                isLoadingLiveFixtures={isLoadingLiveFixtures}
+                onFetchLiveFixtures={loadLiveFixtures}
+              />
+              <LiveFixtureMaintenancePanel
+                adminSecret={liveFixtureAdminSecret}
+                adminMessage={liveFixtureAdminMessage}
+                adminStatus={liveFixtureAdminStatus}
+                isAdminBusy={isLiveFixtureAdminBusy}
+                onAdminSecretChange={setLiveFixtureAdminSecret}
+                onCheckStatus={() => runLiveFixtureAdminAction("status")}
+                onRefreshNow={() => runLiveFixtureAdminAction("refresh")}
+                onCleanupOldFixtures={() => runLiveFixtureAdminAction("cleanup")}
+              />
+              <FixtureCsvPanel
+                csvMessage={csvMessage}
+                onExportCsv={exportFixturesCsv}
+                onImportCsv={importFixturesCsv}
+              />
+              <CloudSyncPanel
+                authEmail={authEmail}
+                authMessage={authMessage}
+                activeUserEmail={activeUserEmail}
+                cloudWorkspaceId={cloudWorkspaceId}
+                cloudMessage={cloudMessage}
+                isCloudBusy={isCloudBusy || isAuthBusy || !hasSupabaseConfig}
+                isSignedIn={Boolean(session)}
+                onAuthEmailChange={setAuthEmail}
+                onSendMagicLink={sendMagicLink}
+                onSignOut={signOutOfSupabase}
+                onCloudWorkspaceIdChange={setCloudWorkspaceId}
+                onSaveCloud={saveWorkspaceToCloud}
+                onLoadCloud={loadWorkspaceFromCloud}
+                onNewCloudId={createNewCloudWorkspaceId}
+              />
+            </>
+          )}
+
+          {activeTab === "analytics" && (
+            <>
+              <AccuracyDashboard
+                accuracySummary={accuracySummary}
+                selectedRoundAccuracySummary={selectedRoundAccuracySummary}
+                selectedRoundLabel={selectedRoundLabel}
+              />
+              <EvidenceReadinessPanel
+                summary={evidenceAuditSummary}
+                selectedRoundLabel={selectedRoundLabel}
+              />
+              <LeaderboardPanel leaderboard={leaderboard} selectedRoundLabel={selectedRoundLabel} />
+              <RuleLearningPanel ruleLearning={ruleLearning} />
+              <RuleWeightTuningPanel
+                ruleWeights={ruleWeights}
+                quality={quality}
+                conflict={conflict}
+                onUpdateWeight={updateRuleWeight}
+                onResetWeights={resetRuleWeights}
+              />
+            </>
+          )}
         </div>
       </section>
     </main>

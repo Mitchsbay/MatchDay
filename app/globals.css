@@ -39,6 +39,39 @@ h1 { font-size: clamp(32px, 5vw, 56px); margin: 0 0 10px; line-height: 1.02; }
 .score-input { width: 72px; padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: #020617; color: var(--text); }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
 .primary { border: 0; background: var(--blue); color: #082f49; font-weight: 800; padding: 11px 14px; border-radius: 12px; }
+
+.workspace-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 18px 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.workspace-tab {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 10px 16px;
+  border-radius: 10px 10px 0 0;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+}
+.workspace-tab.active {
+  color: var(--text);
+  border-bottom: 2px solid var(--blue);
+  background: var(--panel-2);
+}
+.workspace-tab-badge {
+  display: inline-block;
+  font-size: 0.75em;
+  font-weight: 800;
+  color: var(--blue);
+  background: rgba(56, 189, 248, 0.12);
+  border-radius: 999px;
+  padding: 1px 8px;
+  margin-left: 4px;
+}
 .secondary { border: 1px solid var(--border); background: rgba(31,41,55,.75); color: var(--text); padding: 11px 14px; border-radius: 12px; }
 .result-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
 .metric { background: rgba(31,41,55,.7); border: 1px solid var(--border); border-radius: 16px; padding: 14px; }
