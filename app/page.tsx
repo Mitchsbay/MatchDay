@@ -33,12 +33,13 @@ import { useWorkspaceAutosave } from "../hooks/useWorkspaceAutosave";
 import { useWorkspaceCloudSync } from "../hooks/useWorkspaceCloudSync";
 import { FixtureList } from "../components/FixtureList";
 import { RoundManagement } from "../components/RoundManagement";
-import { WorkspacePersistencePanel, CloudSyncPanel, FixtureCsvPanel } from "../components/WorkspacePanels";
+import { WorkspacePersistencePanel, CloudSyncPanel, FixtureCsvPanel, FixtureAutomationPanel, LiveFixturesPanel } from "../components/WorkspacePanels";
 import { AccuracyDashboard, LeaderboardPanel, RuleLearningPanel, RuleWeightTuningPanel } from "../components/DashboardPanels";
 import { PredictionSummaryPanel, FixtureDetailsPanel, EntrantsPicksPanel, ResultInputsPanel } from "../components/FixturePanels";
 import { TeamStrengthInputsPanel, RecentFormInputsPanel, AvailabilityInputsPanel, ContextInputsPanel, OddsInputsPanel, GateEvidencePanels, ManualGateInputsPanel, PredictionGatesPanel } from "../components/EvidenceInputPanels";
 import {
   ALL_ROUNDS,
+  applyFixtureBatch,
   calculateTipPoints,
   cloneEntrants,
   cloneFixtures,
@@ -49,6 +50,8 @@ import {
   normaliseRound,
 } from "../lib/workspace";
 import { exportFixturesToCsv, importFixturesFromCsv } from "../lib/csvWorkspace";
+import { generateRoundRobinFixtures, FixtureGenerationRequest } from "../lib/fixtureAutomation";
+import { fetchLiveFixtures } from "../lib/liveFixtures";
 
 export default function Home() {
   const [fixtures, setFixtures] = useState<Fixture[]>(() => cloneFixtures(initialFixtures));
@@ -58,6 +61,9 @@ export default function Home() {
   const [entrants, setEntrants] = useState<Entrant[]>(() => cloneEntrants(initialEntrants));
   const [userTips, setUserTips] = useState<UserTip[]>(() => cloneUserTips(initialUserTips));
   const [csvMessage, setCsvMessage] = useState("CSV import/export has not run yet.");
+  const [automationMessage, setAutomationMessage] = useState("Fixture automation has not run yet.");
+  const [liveFixturesMessage, setLiveFixturesMessage] = useState("Live fixtures have not been fetched yet.");
+  const [isLoadingLiveFixtures, setIsLoadingLiveFixtures] = useState(false);
 
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const {
@@ -227,6 +233,53 @@ export default function Home() {
       })
       .sort((a, b) => b.points - a.points || b.hitRate - a.hitRate || b.correct - a.correct);
   }, [entrants, visibleFixtures, userTips]);
+  function generateAutomatedFixtures(request: FixtureGenerationRequest, mode: "append" | "replace") {
+    const generation = generateRoundRobinFixtures(request);
+    if (generation.fixtures.length === 0) {
+      setAutomationMessage(generation.warnings.join(" ") || "Fixture generation failed: no fixtures created.");
+      return;
+    }
+
+    const applied = applyFixtureBatch(generation.fixtures, fixtures, userTips, mode);
+    setFixtures(applied.fixtures);
+    setUserTips(applied.tips);
+    setActiveFixtureId(applied.fixtures[0].id);
+    setSelectedRound(normaliseRound(applied.fixtures[0].round));
+    setAutomationMessage(
+      `Generated ${generation.fixtures.length} fixtures for ${generation.teams.length} teams using ${request.format} round-robin ${mode} mode.${
+        applied.orphanedTipsCount > 0
+          ? ` Removed ${applied.orphanedTipsCount} tip${applied.orphanedTipsCount === 1 ? "" : "s"} that pointed at fixtures no longer in the workspace.`
+          : ""
+      }${generation.warnings.length ? ` Warnings: ${generation.warnings.join(" ")}` : ""}`,
+    );
+  }
+
+  async function loadLiveFixtures(mode: "append" | "replace") {
+    setIsLoadingLiveFixtures(true);
+    try {
+      const result = await fetchLiveFixtures(supabase);
+      if (result.fixtures.length === 0) {
+        setLiveFixturesMessage(result.warnings.join(" ") || "No live fixtures were returned.");
+        return;
+      }
+
+      const applied = applyFixtureBatch(result.fixtures, fixtures, userTips, mode);
+      setFixtures(applied.fixtures);
+      setUserTips(applied.tips);
+      setActiveFixtureId(applied.fixtures[0].id);
+      setSelectedRound(normaliseRound(applied.fixtures[0].round));
+      setLiveFixturesMessage(
+        `Fetched ${result.fixtures.length} live fixtures using ${mode} mode.${
+          applied.orphanedTipsCount > 0
+            ? ` Removed ${applied.orphanedTipsCount} tip${applied.orphanedTipsCount === 1 ? "" : "s"} that pointed at fixtures no longer in the workspace.`
+            : ""
+        }${result.warnings.length ? ` Warnings: ${result.warnings.join(" ")}` : ""}`,
+      );
+    } finally {
+      setIsLoadingLiveFixtures(false);
+    }
+  }
+
   function exportFixturesCsv() {
     const csv = exportFixturesToCsv(fixtures);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -246,15 +299,17 @@ export default function Home() {
       return;
     }
 
-    setFixtures((current) =>
-      mode === "replace" ? importResult.fixtures : [...importResult.fixtures, ...current],
-    );
-    setActiveFixtureId(importResult.fixtures[0].id);
-    setSelectedRound(normaliseRound(importResult.fixtures[0].round));
+    const applied = applyFixtureBatch(importResult.fixtures, fixtures, userTips, mode);
+    setFixtures(applied.fixtures);
+    setUserTips(applied.tips);
+    setActiveFixtureId(applied.fixtures[0].id);
+    setSelectedRound(normaliseRound(applied.fixtures[0].round));
     setCsvMessage(
       `Imported ${importResult.fixtures.length} fixtures from CSV using ${mode} mode.${
-        importResult.warnings.length ? ` Warnings: ${importResult.warnings.join(" ")}` : ""
-      }`,
+        applied.orphanedTipsCount > 0
+          ? ` Removed ${applied.orphanedTipsCount} tip${applied.orphanedTipsCount === 1 ? "" : "s"} that pointed at fixtures no longer in the workspace.`
+          : ""
+      }${importResult.warnings.length ? ` Warnings: ${importResult.warnings.join(" ")}` : ""}`,
     );
   }
 
@@ -524,12 +579,10 @@ export default function Home() {
     <main className="container">
       <section className="header">
         <div>
-          <div className="eyebrow">Tipping Gates App · P19</div>
-          <h1>Evidence-based tipping gates with CSV fixture workflows.</h1>
+          <div className="eyebrow">Tipping Gates App · P20</div>
+          <h1>Evidence-based tipping gates with fixture automation and CSV workflows.</h1>
           <p className="lead">
-            P19 adds spreadsheet-friendly fixture import/export, so rounds, fixtures,
-            team-stat evidence, recent form, market probabilities and results can be
-            managed in bulk without losing the gated prediction workflow.
+            P20 adds round-robin fixture automation, so a competition fixture list can be generated from a team list before evidence, tips, results and CSV workflows are layered on top.
           </p>
         </div>
         <button className="primary" onClick={addBlankFixture}>Add Fixture</button>
@@ -563,6 +616,15 @@ export default function Home() {
             onExportBackup={exportWorkspaceBackup}
             onImportBackup={importWorkspaceBackup}
             onResetSamples={resetWorkspaceToSamples}
+          />
+          <FixtureAutomationPanel
+            automationMessage={automationMessage}
+            onGenerateFixtures={generateAutomatedFixtures}
+          />
+          <LiveFixturesPanel
+            liveFixturesMessage={liveFixturesMessage}
+            isLoadingLiveFixtures={isLoadingLiveFixtures}
+            onFetchLiveFixtures={loadLiveFixtures}
           />
           <FixtureCsvPanel
             csvMessage={csvMessage}

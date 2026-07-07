@@ -63,8 +63,13 @@ export type FixtureCsvImportResult = {
   warnings: string[];
 };
 
+function neutraliseCsvFormula(value: string): string {
+  return /^\s*[=+\-@]/.test(value) ? `'${value}` : value;
+}
+
 function escapeCsvCell(value: string | number): string {
-  const stringValue = String(value ?? "");
+  const rawValue = String(value ?? "");
+  const stringValue = typeof value === "string" ? neutraliseCsvFormula(rawValue) : rawValue;
   if (!/[",\n\r]/.test(stringValue)) return stringValue;
   return `"${stringValue.replace(/"/g, '""')}"`;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChangeEvent } from "react";
+import { ChangeEvent, useState } from "react";
 
 export function WorkspacePersistencePanel(props: {
   storageMessage: string;
@@ -81,6 +81,17 @@ export function FixtureCsvPanel(props: {
   const handleFileImport = (event: ChangeEvent<HTMLInputElement>, mode: "append" | "replace") => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (mode === "replace") {
+      const confirmed = window.confirm(
+        "Replace mode deletes every fixture currently in this workspace and swaps in the CSV rows instead. " +
+          "Any tips submitted against fixtures that get removed will no longer count toward the leaderboard. " +
+          "This can't be undone. Continue?"
+      );
+      if (!confirmed) {
+        event.target.value = "";
+        return;
+      }
+    }
     const reader = new FileReader();
     reader.onload = () => {
       props.onImportCsv(String(reader.result ?? ""), mode);
@@ -107,6 +118,112 @@ export function FixtureCsvPanel(props: {
         </label>
       </div>
       <div className="note-box">{props.csvMessage || "No CSV import/export action yet."}</div>
+    </section>
+  );
+}
+
+export function FixtureAutomationPanel(props: {
+  automationMessage: string;
+  onGenerateFixtures: (request: {
+    competition: string;
+    teamsText: string;
+    startRound: number;
+    format: "single" | "double";
+    dateLabel: string;
+  }, mode: "append" | "replace") => void;
+}) {
+  const defaultTeams = "Arsenal\nChelsea\nLiverpool\nManchester City";
+  const [competition, setCompetition] = useState("Generated Competition");
+  const [teamsText, setTeamsText] = useState(defaultTeams);
+  const [startRound, setStartRound] = useState("1");
+  const [format, setFormat] = useState<"single" | "double">("single");
+  const [dateLabel, setDateLabel] = useState("TBC");
+
+  const handleGenerate = (mode: "append" | "replace") => {
+    if (mode === "replace") {
+      const confirmed = window.confirm(
+        "Replace mode deletes every fixture currently in this workspace and swaps in the generated fixture list instead. " +
+          "Any tips submitted against fixtures that get removed will no longer count toward the leaderboard. " +
+          "Export a JSON backup first if this is a real competition. Continue?",
+      );
+      if (!confirmed) return;
+    }
+
+    props.onGenerateFixtures(
+      {
+        competition,
+        teamsText,
+        startRound: Number(startRound),
+        format,
+        dateLabel,
+      },
+      mode,
+    );
+  };
+
+  return (
+    <section className="card" style={{ marginBottom: 18 }}>
+      <h3>P20 Fixture Automation</h3>
+      <p className="section-help">
+        Generate a round-robin fixture list from a team list. This creates blank evidence-ready fixtures, then you can use CSV import or manual inputs to fill team stats, form, results and market data.
+      </p>
+      <div className="field-row">
+        <label>Competition<input value={competition} onChange={(event) => setCompetition(event.target.value)} /></label>
+        <label>Start round<input type="number" min="1" value={startRound} onChange={(event) => setStartRound(event.target.value)} /></label>
+      </div>
+      <div className="field-row">
+        <label>Fixture format
+          <select value={format} onChange={(event) => setFormat(event.target.value as "single" | "double")}>
+            <option value="single">Single round robin</option>
+            <option value="double">Double round robin</option>
+          </select>
+        </label>
+        <label>Date label<input value={dateLabel} onChange={(event) => setDateLabel(event.target.value)} placeholder="TBC, Weekend 1, 2026-08-14" /></label>
+      </div>
+      <label>Teams, one per line<textarea rows={6} value={teamsText} onChange={(event) => setTeamsText(event.target.value)} /></label>
+      <div className="actions">
+        <button className="secondary" onClick={() => handleGenerate("append")}>Generate and append fixtures</button>
+        <button className="secondary danger" onClick={() => handleGenerate("replace")}>Generate and replace fixtures</button>
+      </div>
+      <div className="note-box">{props.automationMessage || "Fixture automation has not run yet."}</div>
+    </section>
+  );
+}
+
+export function LiveFixturesPanel(props: {
+  liveFixturesMessage: string;
+  isLoadingLiveFixtures: boolean;
+  onFetchLiveFixtures: (mode: "append" | "replace") => void;
+}) {
+  const handleFetch = (mode: "append" | "replace") => {
+    if (mode === "replace") {
+      const confirmed = window.confirm(
+        "Replace mode deletes every fixture currently in this workspace and swaps in the live fixture list instead. " +
+          "Any tips submitted against fixtures that get removed will no longer count toward the leaderboard. " +
+          "Export a JSON backup first if this is a real competition. Continue?"
+      );
+      if (!confirmed) return;
+    }
+    props.onFetchLiveFixtures(mode);
+  };
+
+  return (
+    <section className="card" style={{ marginBottom: 18 }}>
+      <h3>P21 Live Fixtures (football-data.org)</h3>
+      <p className="section-help">
+        Pull real upcoming Premier League fixtures, season stats and recent form from a scheduled cron job.
+        Odds, match results, missing players and manual gate scores aren&apos;t available from this source, so
+        those stay blank and editable, same as a CSV-imported or generated fixture.
+      </p>
+      <div className="actions">
+        <button className="secondary" onClick={() => handleFetch("append")} disabled={props.isLoadingLiveFixtures}>
+          {props.isLoadingLiveFixtures ? "Loading…" : "Fetch live fixtures and append"}
+        </button>
+        <button className="secondary danger" onClick={() => handleFetch("replace")} disabled={props.isLoadingLiveFixtures}>
+          Fetch live fixtures and replace
+        </button>
+      </div>
+      <div className="note-box">{props.liveFixturesMessage || "Live fixtures have not been fetched yet."}</div>
     </section>
   );
 }

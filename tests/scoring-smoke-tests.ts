@@ -1,6 +1,7 @@
 import assert from "assert/strict";
 import { fixtures } from "../lib/sampleData";
 import { exportFixturesToCsv, importFixturesFromCsv } from "../lib/csvWorkspace";
+import { generateRoundRobinFixtures, parseFixtureGeneratorTeams } from "../lib/fixtureAutomation";
 import {
   applyCalculatedGaps,
   calculateAccuracySummary,
@@ -22,6 +23,7 @@ import {
   type RecentFormGame,
 } from "../lib/scoringEngine";
 import {
+  applyFixtureBatch,
   calculateTipPoints,
   cloneFixtures,
   createBlankFixture,
@@ -29,6 +31,7 @@ import {
   getActualOutcomeFromScore,
   normaliseRound,
 } from "../lib/workspace";
+import { mapLiveFixtureRow, type LiveFixtureRow } from "../lib/liveFixtures";
 
 function assertBetween(value: number, min: number, max: number, label: string) {
   assert.ok(
@@ -279,6 +282,107 @@ function runCsvImportExportSmokeTests() {
   assert.equal(imported.fixtures[0].homeStats.points, fixtures[0].homeStats.points);
   assert.equal(imported.fixtures[0].homeRecentForm.length, 5);
   assert.equal(imported.fixtures[0].matchResult.status, fixtures[0].matchResult.status);
+
+  const formulaFixture = {
+    ...fixtures[0],
+    competition: "=SUM(1,1)",
+    round: "+Round",
+    homeTeam: "@Home",
+    awayTeam: "-Away",
+    oddsMarket: { ...fixtures[0].oddsMarket, sourceLabel: "=Market" },
+  };
+  const guardedCsv = exportFixturesToCsv([formulaFixture]);
+  assert.ok(guardedCsv.includes("'=SUM(1,1)"), "CSV export should neutralise formula-like competition text");
+  assert.ok(guardedCsv.includes("'+Round"), "CSV export should neutralise formula-like round text");
+  assert.ok(guardedCsv.includes("'@Home"), "CSV export should neutralise formula-like home team text");
+  assert.ok(guardedCsv.includes("'-Away"), "CSV export should neutralise formula-like away team text");
+  assert.ok(guardedCsv.includes("'=Market"), "CSV export should neutralise formula-like odds source text");
+}
+
+function runFixtureAutomationSmokeTests() {
+  const parsed = parseFixtureGeneratorTeams("Arsenal\nChelsea\narsenal\nLiverpool");
+  assert.deepEqual(parsed.teams, ["Arsenal", "Chelsea", "Liverpool"]);
+  assert.ok(parsed.warnings.some((warning) => warning.includes("Duplicate team skipped")));
+
+  const single = generateRoundRobinFixtures({
+    competition: "Smoke League",
+    teamsText: "A\nB\nC\nD",
+    startRound: 3,
+    format: "single",
+    dateLabel: "TBC",
+  });
+  assert.equal(single.fixtures.length, 6, "4-team single round robin should generate 6 fixtures");
+  assert.equal(single.fixtures[0].competition, "Smoke League");
+  assert.equal(single.fixtures[0].round, "Round 3");
+  assert.equal(new Set(single.fixtures.map((fixture) => fixture.id)).size, single.fixtures.length);
+
+  const uniquePairs = new Set(
+    single.fixtures.map((fixture) => [fixture.homeTeam, fixture.awayTeam].sort().join("|")),
+  );
+  assert.equal(uniquePairs.size, 6, "single round robin should create each pairing once");
+
+  const double = generateRoundRobinFixtures({
+    competition: "Smoke League",
+    teamsText: "A\nB\nC\nD",
+    startRound: 1,
+    format: "double",
+    dateLabel: "TBC",
+  });
+  assert.equal(double.fixtures.length, 12, "4-team double round robin should generate 12 fixtures");
+
+  const odd = generateRoundRobinFixtures({
+    competition: "Odd League",
+    teamsText: "A\nB\nC",
+    startRound: 1,
+    format: "single",
+    dateLabel: "TBC",
+  });
+  assert.equal(odd.fixtures.length, 3, "3-team single round robin should generate 3 played fixtures with byes skipped");
+  assert.ok(odd.warnings.some((warning) => warning.includes("Odd number of teams")));
+}
+
+function runWorkspaceBatchAndLiveFixturesSmokeTests() {
+  const existingFixture = createBlankFixture("Round 1", "Sample League");
+  const survivingFixture = { ...createBlankFixture("Round 2", "Sample League"), id: "keeps-this-one" };
+  const currentTips = [
+    { fixtureId: existingFixture.id, entrantId: "e1", pick: "home" as const, confidence: 60 },
+    { fixtureId: survivingFixture.id, entrantId: "e1", pick: "away" as const, confidence: 55 },
+  ];
+
+  const appended = applyFixtureBatch([survivingFixture], [existingFixture], currentTips, "append");
+  assert.equal(appended.fixtures.length, 2, "append mode should keep existing fixtures plus new ones");
+  assert.equal(appended.tips.length, 2, "append mode should never touch existing tips");
+  assert.equal(appended.orphanedTipsCount, 0);
+
+  const replaced = applyFixtureBatch([survivingFixture], [existingFixture], currentTips, "replace");
+  assert.equal(replaced.fixtures.length, 1, "replace mode should only keep the new fixtures");
+  assert.equal(replaced.tips.length, 1, "replace mode should drop tips pointing at removed fixtures");
+  assert.equal(replaced.tips[0].fixtureId, "keeps-this-one");
+  assert.equal(replaced.orphanedTipsCount, 1);
+
+  const row: LiveFixtureRow = {
+    id: "12345",
+    competition: "Premier League",
+    round: "Matchday 10",
+    match_date: "2026-11-01T15:00:00Z",
+    home_team: "Arsenal",
+    away_team: "Chelsea",
+    home_stats: { ...createBlankFixture("Round 1").homeStats, points: 25, played: 10 },
+    away_stats: { ...createBlankFixture("Round 1").awayStats, points: 18, played: 10 },
+    home_recent_form: [{ result: "W", goalsFor: 2, goalsAgainst: 0 }],
+    away_recent_form: [{ result: "D", goalsFor: 1, goalsAgainst: 1 }],
+  };
+  const mapped = mapLiveFixtureRow(row);
+  assert.equal(mapped.id, "12345");
+  assert.equal(mapped.homeTeam, "Arsenal");
+  assert.equal(mapped.awayTeam, "Chelsea");
+  assert.equal(mapped.homeStats.points, 25);
+  assert.equal(mapped.homeRecentForm[0].result, "W");
+  // Fields football-data.org has no source for should fall back to blank
+  // defaults, same as a CSV-imported or generated fixture.
+  assert.equal(mapped.oddsMarket.homeWinProbability, createBlankFixture("x").oddsMarket.homeWinProbability);
+  assert.equal(mapped.matchResult.status, "pending");
+  assert.equal(mapped.homeMissingPlayers.length, createBlankFixture("x").homeMissingPlayers.length);
 }
 
 runQualityAndPredictionSmokeTest();
@@ -287,5 +391,7 @@ runAvailabilityAndConflictSmokeTests();
 runResultAndLearningSmokeTests();
 runWorkspaceSmokeTests();
 runCsvImportExportSmokeTests();
+runFixtureAutomationSmokeTests();
+runWorkspaceBatchAndLiveFixturesSmokeTests();
 
-console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers and CSV import/export.");
+console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, fixture automation and live fixtures mapping.");

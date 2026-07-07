@@ -51,3 +51,43 @@ create policy "Users can delete own matchday workspaces"
 
 create index if not exists matchday_workspaces_owner_user_id_idx
   on public.matchday_workspaces(owner_user_id);
+
+-- ---------------------------------------------------------------------------
+-- P21: live fixture cache (football-data.org automation)
+--
+-- This is deliberately a separate table from matchday_workspaces above: it's
+-- a shared, public read-only cache of real fixture data, written only by the
+-- scheduled cron job (via the service-role key, which bypasses RLS entirely).
+-- It has no owner_user_id and no relationship to any individual's saved
+-- workspace — every signed-in or anonymous visitor sees the same rows.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.live_fixtures (
+  id text primary key,               -- football-data.org match id, as text
+  competition text not null,
+  round text,
+  match_date timestamptz not null,
+  home_team text not null,
+  away_team text not null,
+  home_stats jsonb not null,         -- shape: TeamStats
+  away_stats jsonb not null,         -- shape: TeamStats
+  home_recent_form jsonb not null,   -- shape: RecentFormGame[]
+  away_recent_form jsonb not null,   -- shape: RecentFormGame[]
+  status text not null default 'SCHEDULED',
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists live_fixtures_match_date_idx on public.live_fixtures (match_date);
+create index if not exists live_fixtures_competition_idx on public.live_fixtures (competition);
+
+alter table public.live_fixtures enable row level security;
+
+drop policy if exists "live_fixtures_public_read" on public.live_fixtures;
+create policy "live_fixtures_public_read"
+  on public.live_fixtures
+  for select
+  using (true);
+
+-- No insert/update/delete policy is defined on purpose: the cron job writes
+-- using the Supabase service-role key, which bypasses RLS. No anon/authenticated
+-- client can write to this table under any circumstances.

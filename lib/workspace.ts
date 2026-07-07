@@ -19,15 +19,24 @@ import {
 
 export const ALL_ROUNDS = "__all_rounds__";
 
-export const STORAGE_KEY = "tipping-gates-app-p16-state-v1";
+export const STORAGE_KEY = "tipping-gates-app-p20-state-v1";
 export const LEGACY_STORAGE_KEYS = [
+  "tipping-gates-app-p16-state-v1",
   "tipping-gates-app-p15-state-v1",
   "tipping-gates-app-p14-state-v1",
   "tipping-gates-app-p13-state-v1",
   "tipping-gates-app-p12-state-v1",
   "tipping-gates-app-p11-state-v1",
 ];
-export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p16-cloud-workspace-id";
+export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p20-cloud-workspace-id";
+export const LEGACY_CLOUD_WORKSPACE_ID_KEYS = [
+  "tipping-gates-app-p16-cloud-workspace-id",
+  "tipping-gates-app-p15-cloud-workspace-id",
+  "tipping-gates-app-p14-cloud-workspace-id",
+  "tipping-gates-app-p13-cloud-workspace-id",
+  "tipping-gates-app-p12-cloud-workspace-id",
+  "tipping-gates-app-p11-cloud-workspace-id",
+];
 
 export type PersistedAppState = {
   version: string;
@@ -95,7 +104,7 @@ export function createPersistedState(
   userTips: UserTip[],
 ): PersistedAppState {
   return {
-    version: "0.16.0",
+    version: "0.20.0",
     savedAt: new Date().toISOString(),
     fixtures: cloneFixtures(fixtures),
     activeFixtureId,
@@ -126,6 +135,35 @@ export function createBlankFixture(round: string, competition = "New Competition
     oddsMarket: { ...emptyOddsMarket },
     matchResult: { ...emptyMatchResult },
     scores: { ...emptyScores },
+  };
+}
+
+export type FixtureBatchApplyResult = {
+  fixtures: Fixture[];
+  tips: UserTip[];
+  orphanedTipsCount: number;
+};
+
+// Shared by every fixture-batch entry point (CSV import, round-robin generator,
+// live fixture fetch): "append" just prepends, "replace" swaps in the new set
+// and drops any tips that pointed at fixtures which no longer exist, rather
+// than leaving them silently orphaned.
+export function applyFixtureBatch(
+  newFixtures: Fixture[],
+  currentFixtures: Fixture[],
+  currentTips: UserTip[],
+  mode: "append" | "replace"
+): FixtureBatchApplyResult {
+  if (mode === "append") {
+    return { fixtures: [...newFixtures, ...currentFixtures], tips: currentTips, orphanedTipsCount: 0 };
+  }
+
+  const survivingIds = new Set(newFixtures.map((fixture) => fixture.id));
+  const keptTips = currentTips.filter((tip) => survivingIds.has(tip.fixtureId));
+  return {
+    fixtures: newFixtures,
+    tips: keptTips,
+    orphanedTipsCount: currentTips.length - keptTips.length,
   };
 }
 

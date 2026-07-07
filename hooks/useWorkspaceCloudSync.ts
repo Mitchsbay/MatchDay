@@ -13,6 +13,7 @@ import { RuleWeights, defaultRuleWeights } from "../lib/scoringEngine";
 import {
   ALL_ROUNDS,
   CLOUD_WORKSPACE_ID_KEY,
+  LEGACY_CLOUD_WORKSPACE_ID_KEYS,
   cloneEntrants,
   cloneFixtures,
   cloneUserTips,
@@ -65,8 +66,13 @@ export function useWorkspaceCloudSync({
   const [isCloudBusy, setIsCloudBusy] = useState(false);
 
   useEffect(() => {
-    const existingWorkspaceId = window.localStorage.getItem(CLOUD_WORKSPACE_ID_KEY);
+    const existingWorkspaceId =
+      window.localStorage.getItem(CLOUD_WORKSPACE_ID_KEY) ??
+      LEGACY_CLOUD_WORKSPACE_ID_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean);
+
     if (existingWorkspaceId) {
+      // Migrate forward so future loads hit the current key directly.
+      window.localStorage.setItem(CLOUD_WORKSPACE_ID_KEY, existingWorkspaceId);
       setCloudWorkspaceId(existingWorkspaceId);
       return;
     }
