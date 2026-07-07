@@ -110,7 +110,7 @@ export function createPersistedState(
   userTips: UserTip[],
 ): PersistedAppState {
   return {
-    version: "0.23.0",
+    version: "0.23.2",
     savedAt: new Date().toISOString(),
     fixtures: cloneFixtures(fixtures),
     activeFixtureId,

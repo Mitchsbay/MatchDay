@@ -1,16 +1,16 @@
-# MatchDay / Tipping Gates App P23
+# MatchDay / Tipping Gates App P23.2
 
 Evidence-based tipping comp app with MS-AES-style prediction gates, fixture workflows, persistence, Supabase Auth/cloud sync, CSV import/export, fixture automation, live fixture importing, live fixture maintenance and evidence readiness auditing.
 
 
-## P23 additions
+## P23.2 additions
 
 - Evidence Readiness Audit panel for selected-round or all-round fixture review.
 - Fixture-level completeness scoring across Quality, Form, Availability, Context, Odds and Result inputs.
 - Active fixture summary now shows evidence readiness percentage, source type and the top blocker/warning.
 - New `lib/evidenceAudit.ts` keeps evidence-readiness logic separate from the prediction engine.
 - Smoke-test coverage for evidence audit classification and summary calculations.
-- App version updated to `0.23.0` with P23 local-storage/cloud workspace keys and P22/P21 legacy fallback preserved.
+- App version updated to `0.23.2`. P23 local-storage/cloud workspace keys are retained because this is a UI/source-label patch, with P22/P21 legacy fallback preserved.
 
 ## P22 additions
 
@@ -73,3 +73,11 @@ CRON_SECRET=...
 ```
 
 The service role key is server-only and must never be exposed to the browser.
+
+## P23.2 tab restructuring
+
+- Adds a tab bar after round management: Tip Now, Evidence, Data & Import, and Analytics & Admin.
+- Keeps the day-to-day tipping flow on the default Tip Now tab.
+- Moves evidence entry, bulk tools, and analytics/admin panels off the main scroll path.
+- Evidence tab shows the active fixture evidence completeness badge.
+- Includes P23.1 source-label fix: generated fixture IDs are now recognized as Manual/generated fixtures instead of Workspace/sample fixtures.

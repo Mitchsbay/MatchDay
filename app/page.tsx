@@ -653,10 +653,10 @@ export default function Home() {
     <main className="container">
       <section className="header">
         <div>
-          <div className="eyebrow">Tipping Gates App · P23</div>
+          <div className="eyebrow">Tipping Gates App · P23.2</div>
           <h1>Evidence-based tipping gates with evidence readiness audits.</h1>
           <p className="lead">
-            P23 adds fixture-level evidence completeness checks, source/readiness summaries and missing-input warnings so imported, generated and manual fixtures can be reviewed before tips are trusted.
+            P23.2 adds a tabbed workspace layout on top of the evidence readiness audit, with P23.1 source-label fixes included for generated fixtures.
           </p>
         </div>
         <button className="primary" onClick={addBlankFixture}>Add Fixture</button>
