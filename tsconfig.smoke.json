@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".test-build",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "isolatedModules": false,
+    "incremental": false,
+    "tsBuildInfoFile": ".test-build/tsconfig.smoke.tsbuildinfo",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "lib/scoringEngine.ts",
+    "lib/sampleData.ts",
+    "lib/workspace.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next",
+    ".test-build"
+  ]
+}

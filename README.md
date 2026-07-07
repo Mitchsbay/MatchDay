@@ -1,44 +1,60 @@
-# Tipping Gates App P17
+# Tipping Gates App — P18
 
-Evidence-based tipping competition app built with Next.js for Vercel.
+Vercel-ready Next.js app for a tipping competition with an evidence-based prediction engine.
 
-## P17 focus
+## Current milestone
 
-P17 continues the maintainability cleanup started in P16. The previous single `app/page.tsx` had become too large, so P17 splits the main UI into focused components:
+P18 adds a production smoke-test layer on top of P17's maintainability split.
 
-- `components/WorkspacePanels.tsx` — browser persistence and Supabase cloud sync panels
-- `components/DashboardPanels.tsx` — accuracy dashboard, leaderboard, rule learning and weight tuning
-- `components/FixturePanels.tsx` — fixture summary, fixture details, entrant picks and result inputs
-- `components/EvidenceInputPanels.tsx` — team stats, form, availability, context, odds, evidence and gate panels
+### Included
 
-`app/page.tsx` is now primarily state orchestration, handlers, and composition.
+- Evidence-based Quality Gate from raw team stats
+- Recent Form Gate from last-game results
+- Availability Gate from missing-player evidence
+- Context/Motivation Gate from structured flags
+- Odds/External Sanity Check Gate
+- Conflict and Confidence Gates
+- Result and accuracy tracking
+- Rule learning dashboard
+- Adjustable rule weights
+- Browser autosave plus JSON backup/import
+- Optional Supabase Auth and user-owned cloud workspaces
+- Round management, entrant picks, and leaderboard scoring
+- Split hooks/components to avoid a bloated single-file app
+- Public-registry lockfile guard
+- **P18 smoke tests for scoring, gate direction, results, learning, and workspace helpers**
 
-## Verification
+## Run locally
 
-Run:
+```bash
+npm install
+npm run dev
+```
+
+## Verify before deployment
 
 ```bash
 npm run verify
 ```
 
-This checks:
+`npm run verify` runs:
 
 ```bash
 npm run check:lockfile
 npm run typecheck
+npm run test:smoke
 npm run build
 ```
 
-The lockfile guard fails if internal-only package mirror URLs are present.
+## Supabase setup
 
-## Vercel
+1. Create a Supabase project.
+2. Run `supabase/schema.sql` in the Supabase SQL Editor.
+3. Add these Vercel environment variables:
 
-The project is configured for Vercel with Node 24:
-
-```json
-"engines": {
-  "node": "24.x"
-}
+```txt
+NEXT_PUBLIC_SUPABASE_URL=your Supabase project URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your Supabase anon public key
 ```
 
-Supabase remains optional. Add the public environment variables and run `supabase/schema.sql` only when cloud persistence is needed.
+The app still works without Supabase by using browser autosave and JSON backup/import.

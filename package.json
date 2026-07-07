@@ -1,7 +1,7 @@
 {
   "name": "tipping-gates-app",
   "private": true,
-  "version": "0.17.0",
+  "version": "0.18.0",
   "engines": {
     "node": "24.x"
   },
@@ -12,7 +12,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "check:lockfile": "node scripts/check-lockfile-public-registry.mjs",
-    "verify": "npm run check:lockfile && npm run typecheck && npm run build"
+    "verify": "npm run check:lockfile && npm run typecheck && npm run test:smoke && npm run build",
+    "test:smoke": "rm -rf .test-build && tsc --project tsconfig.smoke.json && node .test-build/tests/scoring-smoke-tests.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.110.1",
