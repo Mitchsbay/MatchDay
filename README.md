@@ -1,6 +1,19 @@
-# MatchDay / Tipping Gates App P20
+# MatchDay / Tipping Gates App P21
 
-Evidence-based tipping comp app with MS-AES-style prediction gates, fixture workflows, persistence, Supabase Auth/cloud sync, CSV import/export and fixture automation.
+Evidence-based tipping comp app with MS-AES-style prediction gates, fixture workflows, persistence, Supabase Auth/cloud sync, CSV import/export, fixture automation and live fixture importing.
+
+## P21 additions
+
+- Live Fixtures panel for importing upcoming fixtures from the shared `public.live_fixtures` cache.
+- Scheduled cron route at `/api/cron/fetch-fixtures`.
+- football-data.org integration for upcoming fixtures, standings-derived team stats and recent form.
+- Separate server-only Supabase service-role client for cron writes.
+- Separate public-read `live_fixtures` table in `supabase/schema.sql`.
+- Shared `applyFixtureBatch` helper now handles append/replace/orphaned-tip cleanup for CSV import, generated fixtures and live fixtures.
+- Live fixture replace mode uses the same confirmation and orphaned-tip cleanup pattern as the other bulk tools.
+- Live fixture mapping smoke-tested with blank fallbacks for unavailable fields.
+- Lockfile guard hardened: every package `resolved` URL must use the public npm registry.
+- App version updated to `0.21.0`.
 
 ## P20 additions
 
@@ -34,32 +47,22 @@ npm run build
 - Keep files at the repository root, not inside a nested app folder.
 - Node is pinned to `24.x` in `package.json`.
 - `.npmrc` forces the public npm registry.
-- `npm run check:lockfile` fails if internal-only registry URLs appear in `package-lock.json`.
+- `npm run check:lockfile` fails if package-lock contains internal-only or non-public npm resolved URLs.
+- `vercel.json` schedules the live fixture cron daily at 06:00 UTC.
 
 ## Supabase notes
 
-Supabase is optional. Browser autosave and JSON backup/export still work without Supabase.
+Supabase is optional for browser autosave and JSON backup/export, but live fixtures require Supabase because the cron job writes into `public.live_fixtures`.
 
-To enable cloud sync, run `supabase/schema.sql` and set:
+To enable cloud sync and live fixtures, run `supabase/schema.sql` and set:
 
 ```txt
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+FOOTBALL_DATA_API_KEY=...
+CRON_SECRET=...
 ```
 
-## Proposed patch (pending review): live fixtures automation
-
-This is a Claude-authored patch on top of P20, not an official version bump — Simon should review,
-adjust, and fold it into the next numbered version as he sees fit.
-
-- New `LiveFixturesPanel`: fetches real upcoming Premier League fixtures, season stats and recent
-  form from a scheduled cron job hitting football-data.org (free tier).
-- Data lands in a new `public.live_fixtures` table (see `supabase/schema.sql`) — separate from
-  `matchday_workspaces`, public-read-only, written only by the cron job via the service-role key.
-- Reuses the existing append/replace + confirmation + orphaned-tip cleanup pattern already used by
-  CSV import and fixture generation, via a newly extracted shared helper, `applyFixtureBatch` in
-  `lib/workspace.ts`.
-- New env vars required: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `FOOTBALL_DATA_API_KEY`,
-  `CRON_SECRET` — see `.env.example`.
-- `vercel.json` now has a `crons` entry hitting `/api/cron/fetch-fixtures` daily at 06:00 UTC.
-
+The service role key is server-only and must never be exposed to the browser.

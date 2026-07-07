@@ -71,7 +71,11 @@ export async function fetchLiveFixtures(
     };
   }
 
-  let query = supabase.from("live_fixtures").select("*").order("match_date", { ascending: true });
+  let query = supabase
+    .from("live_fixtures")
+    .select("*")
+    .gte("match_date", new Date().toISOString())
+    .order("match_date", { ascending: true });
   if (competition) query = query.eq("competition", competition);
 
   const { data, error } = await query;

@@ -155,11 +155,11 @@ type TeamMatchesResponse = {
 };
 
 // One call per team, sequential with a short delay to stay under
-// football-data.org's free-tier rate limit (10 req/min).
+// football-data.org's free-tier rate limit (10 req/min). The default 8s delay leaves room for the two competition-level calls made by the cron route before this loop starts.
 export async function fetchRecentFormForTeams(
   teamIds: number[],
   gamesPerTeam = 5,
-  delayMs = 6500
+  delayMs = 8000
 ): Promise<Map<number, RecentFormGameLike[]>> {
   const result = new Map<number, RecentFormGameLike[]>();
 
