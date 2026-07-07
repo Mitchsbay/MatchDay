@@ -1,6 +1,26 @@
-# MatchDay / Tipping Gates App P21
+# MatchDay / Tipping Gates App P23
 
-Evidence-based tipping comp app with MS-AES-style prediction gates, fixture workflows, persistence, Supabase Auth/cloud sync, CSV import/export, fixture automation and live fixture importing.
+Evidence-based tipping comp app with MS-AES-style prediction gates, fixture workflows, persistence, Supabase Auth/cloud sync, CSV import/export, fixture automation, live fixture importing, live fixture maintenance and evidence readiness auditing.
+
+
+## P23 additions
+
+- Evidence Readiness Audit panel for selected-round or all-round fixture review.
+- Fixture-level completeness scoring across Quality, Form, Availability, Context, Odds and Result inputs.
+- Active fixture summary now shows evidence readiness percentage, source type and the top blocker/warning.
+- New `lib/evidenceAudit.ts` keeps evidence-readiness logic separate from the prediction engine.
+- Smoke-test coverage for evidence audit classification and summary calculations.
+- App version updated to `0.23.0` with P23 local-storage/cloud workspace keys and P22/P21 legacy fallback preserved.
+
+## P22 additions
+
+- Live Fixture Maintenance panel for admin-only cache checks, manual refresh and stale-row cleanup.
+- New secured admin route at `/api/admin/live-fixtures` using the existing `CRON_SECRET` bearer token.
+- Cron route now also deletes stale `public.live_fixtures` rows after a successful refresh.
+- Shared server-side live fixture sync helper extracted into `lib/liveFixtureSync.ts` so cron/manual refresh use the same code path.
+- New `lib/liveFixtureMaintenance.ts` for cache status summaries and cleanup logic.
+- P22 smoke-test coverage for cache summaries and stale-row cutoff logic.
+- App version updated to `0.22.0` with P22 local-storage keys and P21 legacy fallback preserved.
 
 ## P21 additions
 
@@ -9,22 +29,8 @@ Evidence-based tipping comp app with MS-AES-style prediction gates, fixture work
 - football-data.org integration for upcoming fixtures, standings-derived team stats and recent form.
 - Separate server-only Supabase service-role client for cron writes.
 - Separate public-read `live_fixtures` table in `supabase/schema.sql`.
-- Shared `applyFixtureBatch` helper now handles append/replace/orphaned-tip cleanup for CSV import, generated fixtures and live fixtures.
-- Live fixture replace mode uses the same confirmation and orphaned-tip cleanup pattern as the other bulk tools.
-- Live fixture mapping smoke-tested with blank fallbacks for unavailable fields.
+- Shared `applyFixtureBatch` helper handles append/replace/orphaned-tip cleanup for CSV import, generated fixtures and live fixtures.
 - Lockfile guard hardened: every package `resolved` URL must use the public npm registry.
-- App version updated to `0.21.0`.
-
-## P20 additions
-
-- Fixture Automation panel for generating fixtures from a team list.
-- Single round-robin and double round-robin generation.
-- Start round and competition/date-label controls.
-- Append mode for safe bulk creation.
-- Replace mode with confirmation and orphan-tip cleanup.
-- Automatic odd-team bye handling.
-- Duplicate team detection/skipping.
-- Smoke-test coverage for generated fixture counts, duplicate handling, odd-team byes and unique fixture IDs.
 
 ## Verify before deployment
 
@@ -49,6 +55,7 @@ npm run build
 - `.npmrc` forces the public npm registry.
 - `npm run check:lockfile` fails if package-lock contains internal-only or non-public npm resolved URLs.
 - `vercel.json` schedules the live fixture cron daily at 06:00 UTC.
+- `/api/admin/live-fixtures` uses the same `CRON_SECRET` as the scheduled cron route. The secret is typed into the admin panel when needed; it is not stored in workspace state or exposed by environment variables prefixed with `NEXT_PUBLIC_`.
 
 ## Supabase notes
 

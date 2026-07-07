@@ -91,3 +91,9 @@ create policy "live_fixtures_public_read"
 -- No insert/update/delete policy is defined on purpose: the cron job writes
 -- using the Supabase service-role key, which bypasses RLS. No anon/authenticated
 -- client can write to this table under any circumstances.
+
+-- P22 note: old live fixture rows are now cleaned by the scheduled cron route
+-- after each successful refresh, and can also be deleted manually from the
+-- app's Live Fixture Maintenance panel via the admin route. This keeps the
+-- public live_fixtures cache from growing indefinitely while preserving the
+-- user-owned matchday_workspaces table unchanged.

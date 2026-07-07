@@ -32,6 +32,8 @@ import {
   normaliseRound,
 } from "../lib/workspace";
 import { mapLiveFixtureRow, type LiveFixtureRow } from "../lib/liveFixtures";
+import { getLiveFixtureStaleCutoffIso, summariseLiveFixtureRows } from "../lib/liveFixtureMaintenance";
+import { auditFixtureEvidence, summariseEvidenceAudits } from "../lib/evidenceAudit";
 
 function assertBetween(value: number, min: number, max: number, label: string) {
   assert.ok(
@@ -385,6 +387,48 @@ function runWorkspaceBatchAndLiveFixturesSmokeTests() {
   assert.equal(mapped.homeMissingPlayers.length, createBlankFixture("x").homeMissingPlayers.length);
 }
 
+
+function runEvidenceAuditSmokeTests() {
+  const strongSample = auditFixtureEvidence(fixtures[0]);
+  assert.equal(strongSample.fixtureId, fixtures[0].id);
+  assertBetween(strongSample.completenessScore, 1, 100, "sample evidence completeness");
+  assert.ok(strongSample.gates.some((gate) => gate.gateId === "quality"), "audit should include quality gate");
+
+  const blank = createBlankFixture("Audit Round", "Audit League");
+  const blankAudit = auditFixtureEvidence(blank);
+  assert.equal(blankAudit.status, "incomplete");
+  assert.ok(blankAudit.blockers.length > 0, "blank fixture should produce blockers");
+
+  const summary = summariseEvidenceAudits([fixtures[0], blank]);
+  assert.equal(summary.fixtureCount, 2);
+  assert.ok(summary.averageCompleteness > 0);
+  assert.ok(summary.incompleteFixtures >= 1);
+  assert.ok(summary.fixturesNeedingAttention.some((audit) => audit.fixtureId === blank.id));
+}
+
+function runLiveFixtureMaintenanceSmokeTests() {
+  const now = new Date("2026-07-08T00:00:00.000Z");
+  const cutoff = getLiveFixtureStaleCutoffIso(now, 14);
+  assert.equal(cutoff, "2026-06-24T00:00:00.000Z");
+
+  const summary = summariseLiveFixtureRows(
+    [
+      { match_date: "2026-06-01T00:00:00.000Z", updated_at: "2026-06-01T01:00:00.000Z" },
+      { match_date: "2026-07-09T00:00:00.000Z", updated_at: "2026-07-07T01:00:00.000Z" },
+      { match_date: "2026-07-12T00:00:00.000Z", updated_at: "2026-07-08T01:00:00.000Z" },
+    ],
+    now,
+    14,
+  );
+
+  assert.equal(summary.totalRows, 3);
+  assert.equal(summary.futureRows, 2);
+  assert.equal(summary.staleRows, 1);
+  assert.equal(summary.oldestMatchDate, "2026-06-01T00:00:00.000Z");
+  assert.equal(summary.newestMatchDate, "2026-07-12T00:00:00.000Z");
+  assert.equal(summary.latestUpdatedAt, "2026-07-08T01:00:00.000Z");
+}
+
 runQualityAndPredictionSmokeTest();
 runDirectionalConversionSmokeTests();
 runAvailabilityAndConflictSmokeTests();
@@ -393,5 +437,7 @@ runWorkspaceSmokeTests();
 runCsvImportExportSmokeTests();
 runFixtureAutomationSmokeTests();
 runWorkspaceBatchAndLiveFixturesSmokeTests();
+runEvidenceAuditSmokeTests();
+runLiveFixtureMaintenanceSmokeTests();
 
-console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, fixture automation and live fixtures mapping.");
+console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, fixture automation, live fixtures mapping, evidence audit and live fixture maintenance.");

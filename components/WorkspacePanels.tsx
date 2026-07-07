@@ -227,3 +227,72 @@ export function LiveFixturesPanel(props: {
     </section>
   );
 }
+
+export type LiveFixtureAdminStatus = {
+  totalRows: number;
+  futureRows: number;
+  staleRows: number;
+  oldestMatchDate: string | null;
+  newestMatchDate: string | null;
+  latestUpdatedAt: string | null;
+  retentionDays: number;
+  staleBeforeIso: string;
+};
+
+function formatAdminDate(value: string | null): string {
+  if (!value) return "None";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+}
+
+export function LiveFixtureMaintenancePanel(props: {
+  adminSecret: string;
+  adminMessage: string;
+  adminStatus: LiveFixtureAdminStatus | null;
+  isAdminBusy: boolean;
+  onAdminSecretChange: (value: string) => void;
+  onCheckStatus: () => void;
+  onRefreshNow: () => void;
+  onCleanupOldFixtures: () => void;
+}) {
+  return (
+    <section className="card" style={{ marginBottom: 18 }}>
+      <h3>P22 Live Fixture Maintenance</h3>
+      <p className="section-help">
+        Admin-only controls for the shared live-fixture cache. Enter the same secret used for <code>CRON_SECRET</code> to check cache status, refresh fixtures immediately or delete stale rows. The service-role key stays server-side only.
+      </p>
+      <div className="field-row">
+        <label>Admin / cron secret
+          <input
+            type="password"
+            value={props.adminSecret}
+            onChange={(event) => props.onAdminSecretChange(event.target.value)}
+            placeholder="CRON_SECRET"
+          />
+        </label>
+      </div>
+      <div className="actions">
+        <button className="secondary" onClick={props.onCheckStatus} disabled={props.isAdminBusy || !props.adminSecret.trim()}>
+          {props.isAdminBusy ? "Working…" : "Check cache status"}
+        </button>
+        <button className="secondary" onClick={props.onRefreshNow} disabled={props.isAdminBusy || !props.adminSecret.trim()}>
+          Refresh live fixtures now
+        </button>
+        <button className="secondary danger" onClick={props.onCleanupOldFixtures} disabled={props.isAdminBusy || !props.adminSecret.trim()}>
+          Clean old live fixtures
+        </button>
+      </div>
+      {props.adminStatus ? (
+        <div className="result-grid compact">
+          <div className="metric"><div className="label">Cache Rows</div><div className="value">{props.adminStatus.totalRows}</div></div>
+          <div className="metric"><div className="label">Future Fixtures</div><div className="value">{props.adminStatus.futureRows}</div></div>
+          <div className="metric"><div className="label">Stale Rows</div><div className="value">{props.adminStatus.staleRows}</div></div>
+          <div className="metric"><div className="label">Latest Update</div><div className="value small-value">{formatAdminDate(props.adminStatus.latestUpdatedAt)}</div></div>
+          <div className="metric"><div className="label">Oldest Match</div><div className="value small-value">{formatAdminDate(props.adminStatus.oldestMatchDate)}</div></div>
+          <div className="metric"><div className="label">Newest Match</div><div className="value small-value">{formatAdminDate(props.adminStatus.newestMatchDate)}</div></div>
+        </div>
+      ) : null}
+      <div className="note-box">{props.adminMessage || "No live fixture maintenance action yet."}</div>
+    </section>
+  );
+}

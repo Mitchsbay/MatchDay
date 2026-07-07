@@ -1,12 +1,13 @@
 "use client";
 
 import type { Entrant, Fixture, TipPick, UserTip } from "../lib/sampleData";
+import type { FixtureEvidenceAudit } from "../lib/evidenceAudit";
 import type { MatchResultInput } from "../lib/scoringEngine";
 import { accuracyBadge, gateBadge, outcomeLabel, signed } from "../lib/uiFormat";
 import { getTipFor } from "../lib/workspace";
 
-export function PredictionSummaryPanel(props: { fixture: Fixture; result: any; quality: any; form: any; availability: any; context: any; odds: any; conflict: any; accuracy: any }) {
-  const { fixture, result, quality, form, availability, context, odds, conflict, accuracy } = props;
+export function PredictionSummaryPanel(props: { fixture: Fixture; result: any; quality: any; form: any; availability: any; context: any; odds: any; conflict: any; accuracy: any; evidenceAudit: FixtureEvidenceAudit }) {
+  const { fixture, result, quality, form, availability, context, odds, conflict, accuracy, evidenceAudit } = props;
   return (
     <section className="card" style={{ marginBottom: 18 }}>
       <h2>{fixture.homeTeam} vs {fixture.awayTeam}</h2>
@@ -30,6 +31,11 @@ export function PredictionSummaryPanel(props: { fixture: Fixture; result: any; q
         <div className="metric"><div className="label">Gate Status</div><div className="value" style={{ fontSize: 15 }}>{gateBadge(result.gateStatus)}</div></div>
       </div>
       <div className="note-box"><strong>Gate logic:</strong> Quality comes from team stats, form comes from recent results, availability comes from missing-player impact, motivation comes from structured context flags, and odds support comes from external 1X2 probabilities.</div>
+      <div className="warning-box slim">
+        <strong>Evidence readiness:</strong> {evidenceAudit.completenessScore}% · {evidenceAudit.status.toUpperCase()} · {evidenceAudit.sourceSummary}
+        {evidenceAudit.blockers.length > 0 ? <div style={{ marginTop: 8 }}>Top blocker: {evidenceAudit.blockers[0]}</div> : null}
+        {evidenceAudit.blockers.length === 0 && evidenceAudit.warnings.length > 0 ? <div style={{ marginTop: 8 }}>Top warning: {evidenceAudit.warnings[0]}</div> : null}
+      </div>
     </section>
   );
 }

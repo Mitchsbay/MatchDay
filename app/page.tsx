@@ -33,8 +33,8 @@ import { useWorkspaceAutosave } from "../hooks/useWorkspaceAutosave";
 import { useWorkspaceCloudSync } from "../hooks/useWorkspaceCloudSync";
 import { FixtureList } from "../components/FixtureList";
 import { RoundManagement } from "../components/RoundManagement";
-import { WorkspacePersistencePanel, CloudSyncPanel, FixtureCsvPanel, FixtureAutomationPanel, LiveFixturesPanel } from "../components/WorkspacePanels";
-import { AccuracyDashboard, LeaderboardPanel, RuleLearningPanel, RuleWeightTuningPanel } from "../components/DashboardPanels";
+import { WorkspacePersistencePanel, CloudSyncPanel, FixtureCsvPanel, FixtureAutomationPanel, LiveFixturesPanel, LiveFixtureMaintenancePanel, type LiveFixtureAdminStatus } from "../components/WorkspacePanels";
+import { AccuracyDashboard, EvidenceReadinessPanel, LeaderboardPanel, RuleLearningPanel, RuleWeightTuningPanel } from "../components/DashboardPanels";
 import { PredictionSummaryPanel, FixtureDetailsPanel, EntrantsPicksPanel, ResultInputsPanel } from "../components/FixturePanels";
 import { TeamStrengthInputsPanel, RecentFormInputsPanel, AvailabilityInputsPanel, ContextInputsPanel, OddsInputsPanel, GateEvidencePanels, ManualGateInputsPanel, PredictionGatesPanel } from "../components/EvidenceInputPanels";
 import {
@@ -52,6 +52,7 @@ import {
 import { exportFixturesToCsv, importFixturesFromCsv } from "../lib/csvWorkspace";
 import { generateRoundRobinFixtures, FixtureGenerationRequest } from "../lib/fixtureAutomation";
 import { fetchLiveFixtures } from "../lib/liveFixtures";
+import { auditFixtureEvidence, summariseEvidenceAudits } from "../lib/evidenceAudit";
 
 export default function Home() {
   const [fixtures, setFixtures] = useState<Fixture[]>(() => cloneFixtures(initialFixtures));
@@ -64,6 +65,10 @@ export default function Home() {
   const [automationMessage, setAutomationMessage] = useState("Fixture automation has not run yet.");
   const [liveFixturesMessage, setLiveFixturesMessage] = useState("Live fixtures have not been fetched yet.");
   const [isLoadingLiveFixtures, setIsLoadingLiveFixtures] = useState(false);
+  const [liveFixtureAdminSecret, setLiveFixtureAdminSecret] = useState("");
+  const [liveFixtureAdminMessage, setLiveFixtureAdminMessage] = useState("Live fixture maintenance has not run yet.");
+  const [liveFixtureAdminStatus, setLiveFixtureAdminStatus] = useState<LiveFixtureAdminStatus | null>(null);
+  const [isLiveFixtureAdminBusy, setIsLiveFixtureAdminBusy] = useState(false);
 
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const {
@@ -193,6 +198,16 @@ export default function Home() {
     [visibleFixtureResults],
   );
 
+  const evidenceAuditSummary = useMemo(
+    () => summariseEvidenceAudits(visibleFixtures),
+    [visibleFixtures],
+  );
+
+  const activeEvidenceAudit = useMemo(
+    () => auditFixtureEvidence(activeFixture),
+    [activeFixture],
+  );
+
   const leaderboard = useMemo(() => {
     return entrants
       .map((entrant) => {
@@ -277,6 +292,63 @@ export default function Home() {
       );
     } finally {
       setIsLoadingLiveFixtures(false);
+    }
+  }
+
+
+  async function runLiveFixtureAdminAction(action: "status" | "refresh" | "cleanup") {
+    if (!liveFixtureAdminSecret.trim()) {
+      setLiveFixtureAdminMessage("Enter the admin / cron secret before running live fixture maintenance.");
+      return;
+    }
+
+    if (action === "cleanup") {
+      const confirmed = window.confirm(
+        "Clean old rows from the shared live fixture cache? This only deletes cached live_fixtures rows older than the retention window and does not touch your workspace fixtures or entrant tips. Continue?",
+      );
+      if (!confirmed) return;
+    }
+
+    setIsLiveFixtureAdminBusy(true);
+    try {
+      const endpoint = "/api/admin/live-fixtures";
+      const response = action === "status"
+        ? await fetch(endpoint, {
+            headers: { authorization: `Bearer ${liveFixtureAdminSecret.trim()}` },
+          })
+        : await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${liveFixtureAdminSecret.trim()}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ action }),
+          });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || `Live fixture maintenance failed with HTTP ${response.status}`);
+      }
+
+      setLiveFixtureAdminStatus(payload.status ?? null);
+      if (action === "status") {
+        setLiveFixtureAdminMessage("Live fixture cache status loaded.");
+      } else if (action === "refresh") {
+        const refresh = payload.refresh;
+        setLiveFixtureAdminMessage(
+          `Refresh completed. Upserted ${refresh?.fixturesUpserted ?? 0} fixtures and processed ${refresh?.teamsProcessed ?? 0} teams.`,
+        );
+      } else {
+        const cleanup = payload.cleanup;
+        setLiveFixtureAdminMessage(
+          `Cleanup completed. Deleted ${cleanup?.deletedRows ?? 0} stale live fixture row${cleanup?.deletedRows === 1 ? "" : "s"}.`,
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown live fixture maintenance error.";
+      setLiveFixtureAdminMessage(message);
+    } finally {
+      setIsLiveFixtureAdminBusy(false);
     }
   }
 
@@ -579,10 +651,10 @@ export default function Home() {
     <main className="container">
       <section className="header">
         <div>
-          <div className="eyebrow">Tipping Gates App · P20</div>
-          <h1>Evidence-based tipping gates with fixture automation and CSV workflows.</h1>
+          <div className="eyebrow">Tipping Gates App · P23</div>
+          <h1>Evidence-based tipping gates with evidence readiness audits.</h1>
           <p className="lead">
-            P20 adds round-robin fixture automation, so a competition fixture list can be generated from a team list before evidence, tips, results and CSV workflows are layered on top.
+            P23 adds fixture-level evidence completeness checks, source/readiness summaries and missing-input warnings so imported, generated and manual fixtures can be reviewed before tips are trusted.
           </p>
         </div>
         <button className="primary" onClick={addBlankFixture}>Add Fixture</button>
@@ -626,6 +698,16 @@ export default function Home() {
             isLoadingLiveFixtures={isLoadingLiveFixtures}
             onFetchLiveFixtures={loadLiveFixtures}
           />
+          <LiveFixtureMaintenancePanel
+            adminSecret={liveFixtureAdminSecret}
+            adminMessage={liveFixtureAdminMessage}
+            adminStatus={liveFixtureAdminStatus}
+            isAdminBusy={isLiveFixtureAdminBusy}
+            onAdminSecretChange={setLiveFixtureAdminSecret}
+            onCheckStatus={() => runLiveFixtureAdminAction("status")}
+            onRefreshNow={() => runLiveFixtureAdminAction("refresh")}
+            onCleanupOldFixtures={() => runLiveFixtureAdminAction("cleanup")}
+          />
           <FixtureCsvPanel
             csvMessage={csvMessage}
             onExportCsv={exportFixturesCsv}
@@ -652,6 +734,10 @@ export default function Home() {
             selectedRoundAccuracySummary={selectedRoundAccuracySummary}
             selectedRoundLabel={selectedRoundLabel}
           />
+          <EvidenceReadinessPanel
+            summary={evidenceAuditSummary}
+            selectedRoundLabel={selectedRoundLabel}
+          />
           <LeaderboardPanel leaderboard={leaderboard} selectedRoundLabel={selectedRoundLabel} />
           <RuleLearningPanel ruleLearning={ruleLearning} />
           <RuleWeightTuningPanel
@@ -671,6 +757,7 @@ export default function Home() {
             odds={odds}
             conflict={conflict}
             accuracy={accuracy}
+            evidenceAudit={activeEvidenceAudit}
           />
           <FixtureDetailsPanel fixture={activeFixture} onUpdateField={updateFixtureField} />
           <EntrantsPicksPanel

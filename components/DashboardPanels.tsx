@@ -1,11 +1,52 @@
 "use client";
 
 import type { Entrant } from "../lib/sampleData";
+import type { EvidenceAuditSummary, FixtureEvidenceAudit } from "../lib/evidenceAudit";
 import type { RuleWeights } from "../lib/scoringEngine";
 import { ruleWeightDefinitions } from "../lib/scoringEngine";
 import { signed } from "../lib/uiFormat";
 
 type LeaderboardEntry = Entrant & { submitted: number; settled: number; correct: number; pending: number; points: number; hitRate: number; averageConfidence: number };
+
+function auditStatusBadge(status: FixtureEvidenceAudit["status"]) {
+  if (status === "ready") return <span className="badge good">Ready</span>;
+  if (status === "review") return <span className="badge warn">Review</span>;
+  return <span className="badge bad">Incomplete</span>;
+}
+
+export function EvidenceReadinessPanel(props: { summary: EvidenceAuditSummary; selectedRoundLabel: string }) {
+  const { summary } = props;
+  return (
+    <section className="card" style={{ marginBottom: 18 }}>
+      <h3>P23 Evidence Readiness Audit</h3>
+      <p className="section-help">Checks whether each fixture has enough raw evidence behind the gates before you trust the model output. This does not change the prediction; it flags missing inputs before they quietly weaken confidence.</p>
+      <div className="result-grid compact">
+        <div className="metric"><div className="label">Fixtures Checked</div><div className="value">{summary.fixtureCount}</div></div>
+        <div className="metric"><div className="label">Avg Completeness</div><div className="value">{summary.averageCompleteness}%</div></div>
+        <div className="metric"><div className="label">Ready</div><div className="value">{summary.readyFixtures}</div></div>
+        <div className="metric"><div className="label">Review</div><div className="value">{summary.reviewFixtures}</div></div>
+        <div className="metric"><div className="label">Incomplete</div><div className="value">{summary.incompleteFixtures}</div></div>
+      </div>
+      <div className="note-box">Selected view: {props.selectedRoundLabel}. Quality and form are usually API/CSV-ready; availability, context and odds often still need human review.</div>
+      {summary.fixturesNeedingAttention.length > 0 ? (
+        <div className="learning-table">
+          <div className="learning-row header-row"><span>Fixture</span><span>Status</span><span>Complete</span><span>Top issue</span><span>Source</span></div>
+          {summary.fixturesNeedingAttention.map((audit) => (
+            <div className="learning-row" key={audit.fixtureId}>
+              <span>{audit.fixtureLabel}</span>
+              <span>{auditStatusBadge(audit.status)}</span>
+              <span>{audit.completenessScore}%</span>
+              <span>{audit.blockers[0] ?? audit.warnings[0] ?? "No major issue"}</span>
+              <span>{audit.sourceSummary}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="note-box">All fixtures in this view have enough evidence for normal review.</div>
+      )}
+    </section>
+  );
+}
 
 export function AccuracyDashboard(props: { accuracySummary: any; selectedRoundAccuracySummary: any; selectedRoundLabel: string }) {
   const { accuracySummary, selectedRoundAccuracySummary, selectedRoundLabel } = props;
