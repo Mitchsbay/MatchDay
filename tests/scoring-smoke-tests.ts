@@ -1,5 +1,6 @@
 import assert from "assert/strict";
 import { fixtures } from "../lib/sampleData";
+import { exportFixturesToCsv, importFixturesFromCsv } from "../lib/csvWorkspace";
 import {
   applyCalculatedGaps,
   calculateAccuracySummary,
@@ -265,10 +266,26 @@ function runWorkspaceSmokeTests() {
   assert.equal(persisted.selectedRound, "Round 99");
 }
 
+
+function runCsvImportExportSmokeTests() {
+  const csv = exportFixturesToCsv([fixtures[0]]);
+  assert.ok(csv.includes("home_team"), "CSV export should include fixture headers");
+  assert.ok(csv.includes(fixtures[0].homeTeam), "CSV export should include home team name");
+
+  const imported = importFixturesFromCsv(csv);
+  assert.equal(imported.fixtures.length, 1);
+  assert.equal(imported.fixtures[0].homeTeam, fixtures[0].homeTeam);
+  assert.equal(imported.fixtures[0].awayTeam, fixtures[0].awayTeam);
+  assert.equal(imported.fixtures[0].homeStats.points, fixtures[0].homeStats.points);
+  assert.equal(imported.fixtures[0].homeRecentForm.length, 5);
+  assert.equal(imported.fixtures[0].matchResult.status, fixtures[0].matchResult.status);
+}
+
 runQualityAndPredictionSmokeTest();
 runDirectionalConversionSmokeTests();
 runAvailabilityAndConflictSmokeTests();
 runResultAndLearningSmokeTests();
 runWorkspaceSmokeTests();
+runCsvImportExportSmokeTests();
 
-console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers.");
+console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers and CSV import/export.");

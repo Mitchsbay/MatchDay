@@ -33,7 +33,7 @@ import { useWorkspaceAutosave } from "../hooks/useWorkspaceAutosave";
 import { useWorkspaceCloudSync } from "../hooks/useWorkspaceCloudSync";
 import { FixtureList } from "../components/FixtureList";
 import { RoundManagement } from "../components/RoundManagement";
-import { WorkspacePersistencePanel, CloudSyncPanel } from "../components/WorkspacePanels";
+import { WorkspacePersistencePanel, CloudSyncPanel, FixtureCsvPanel } from "../components/WorkspacePanels";
 import { AccuracyDashboard, LeaderboardPanel, RuleLearningPanel, RuleWeightTuningPanel } from "../components/DashboardPanels";
 import { PredictionSummaryPanel, FixtureDetailsPanel, EntrantsPicksPanel, ResultInputsPanel } from "../components/FixturePanels";
 import { TeamStrengthInputsPanel, RecentFormInputsPanel, AvailabilityInputsPanel, ContextInputsPanel, OddsInputsPanel, GateEvidencePanels, ManualGateInputsPanel, PredictionGatesPanel } from "../components/EvidenceInputPanels";
@@ -48,6 +48,7 @@ import {
   getTipFor,
   normaliseRound,
 } from "../lib/workspace";
+import { exportFixturesToCsv, importFixturesFromCsv } from "../lib/csvWorkspace";
 
 export default function Home() {
   const [fixtures, setFixtures] = useState<Fixture[]>(() => cloneFixtures(initialFixtures));
@@ -56,6 +57,7 @@ export default function Home() {
   const [ruleWeights, setRuleWeights] = useState<RuleWeights>(() => ({ ...defaultRuleWeights }));
   const [entrants, setEntrants] = useState<Entrant[]>(() => cloneEntrants(initialEntrants));
   const [userTips, setUserTips] = useState<UserTip[]>(() => cloneUserTips(initialUserTips));
+  const [csvMessage, setCsvMessage] = useState("CSV import/export has not run yet.");
 
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const {
@@ -225,6 +227,37 @@ export default function Home() {
       })
       .sort((a, b) => b.points - a.points || b.hitRate - a.hitRate || b.correct - a.correct);
   }, [entrants, visibleFixtures, userTips]);
+  function exportFixturesCsv() {
+    const csv = exportFixturesToCsv(fixtures);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `matchday-fixtures-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setCsvMessage(`Exported ${fixtures.length} fixtures to CSV.`);
+  }
+
+  function importFixturesCsv(csv: string, mode: "append" | "replace") {
+    const importResult = importFixturesFromCsv(csv);
+    if (importResult.fixtures.length === 0) {
+      setCsvMessage(importResult.warnings.join(" ") || "CSV import failed: no valid fixtures found.");
+      return;
+    }
+
+    setFixtures((current) =>
+      mode === "replace" ? importResult.fixtures : [...importResult.fixtures, ...current],
+    );
+    setActiveFixtureId(importResult.fixtures[0].id);
+    setSelectedRound(normaliseRound(importResult.fixtures[0].round));
+    setCsvMessage(
+      `Imported ${importResult.fixtures.length} fixtures from CSV using ${mode} mode.${
+        importResult.warnings.length ? ` Warnings: ${importResult.warnings.join(" ")}` : ""
+      }`,
+    );
+  }
+
   function updateSelectedRound(nextRound: string) {
     setSelectedRound(nextRound);
     const nextVisible =
@@ -491,13 +524,12 @@ export default function Home() {
     <main className="container">
       <section className="header">
         <div>
-          <div className="eyebrow">Tipping Gates App · P17</div>
-          <h1>Evidence-based tipping gates with a decomposed, safer codebase.</h1>
+          <div className="eyebrow">Tipping Gates App · P19</div>
+          <h1>Evidence-based tipping gates with CSV fixture workflows.</h1>
           <p className="lead">
-            P17 continues the maintainability cleanup by moving persistence, auth,
-            dashboards, fixture controls, evidence inputs and gate evidence into focused
-            components. The prediction engine and competition workflow remain unchanged,
-            but the page is now much easier to patch safely.
+            P19 adds spreadsheet-friendly fixture import/export, so rounds, fixtures,
+            team-stat evidence, recent form, market probabilities and results can be
+            managed in bulk without losing the gated prediction workflow.
           </p>
         </div>
         <button className="primary" onClick={addBlankFixture}>Add Fixture</button>
@@ -531,6 +563,11 @@ export default function Home() {
             onExportBackup={exportWorkspaceBackup}
             onImportBackup={importWorkspaceBackup}
             onResetSamples={resetWorkspaceToSamples}
+          />
+          <FixtureCsvPanel
+            csvMessage={csvMessage}
+            onExportCsv={exportFixturesCsv}
+            onImportCsv={importFixturesCsv}
           />
           <CloudSyncPanel
             authEmail={authEmail}

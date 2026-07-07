@@ -1,28 +1,21 @@
-# Tipping Gates App — P18
+# Tipping Gates App P19
 
-Vercel-ready Next.js app for a tipping competition with an evidence-based prediction engine.
+Evidence-based tipping comp app with MS-AES-style gates, local/browser persistence, optional Supabase Auth cloud persistence, rounds, leaderboards, smoke tests, and CSV fixture workflows.
 
-## Current milestone
+## P19 additions
 
-P18 adds a production smoke-test layer on top of P17's maintainability split.
-
-### Included
-
-- Evidence-based Quality Gate from raw team stats
-- Recent Form Gate from last-game results
-- Availability Gate from missing-player evidence
-- Context/Motivation Gate from structured flags
-- Odds/External Sanity Check Gate
-- Conflict and Confidence Gates
-- Result and accuracy tracking
-- Rule learning dashboard
-- Adjustable rule weights
-- Browser autosave plus JSON backup/import
-- Optional Supabase Auth and user-owned cloud workspaces
-- Round management, entrant picks, and leaderboard scoring
-- Split hooks/components to avoid a bloated single-file app
-- Public-registry lockfile guard
-- **P18 smoke tests for scoring, gate direction, results, learning, and workspace helpers**
+- Fixture CSV export template
+- Fixture CSV import in append mode
+- Fixture CSV import in replace mode
+- Bulk spreadsheet management for:
+  - competition, round, date, home/away teams
+  - home/away season stats
+  - home/away venue splits
+  - recent form strings such as `W:2-1;D:1-1;L:0-2`
+  - market probabilities
+  - final result status and score
+  - simple manual gate fields
+- CSV smoke-test coverage added to `npm run verify`
 
 ## Run locally
 
@@ -37,24 +30,10 @@ npm run dev
 npm run verify
 ```
 
-`npm run verify` runs:
+This runs the public-registry lockfile guard, TypeScript typecheck, smoke tests, and production build.
 
-```bash
-npm run check:lockfile
-npm run typecheck
-npm run test:smoke
-npm run build
-```
+## Vercel notes
 
-## Supabase setup
-
-1. Create a Supabase project.
-2. Run `supabase/schema.sql` in the Supabase SQL Editor.
-3. Add these Vercel environment variables:
-
-```txt
-NEXT_PUBLIC_SUPABASE_URL=your Supabase project URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your Supabase anon public key
-```
-
-The app still works without Supabase by using browser autosave and JSON backup/import.
+- Node is pinned to `24.x` in `package.json`.
+- `.npmrc` forces the public npm registry.
+- `npm run check:lockfile` fails if internal-only registry URLs appear in `package-lock.json`.

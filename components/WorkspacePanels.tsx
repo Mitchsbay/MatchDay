@@ -72,3 +72,41 @@ export function CloudSyncPanel(props: {
     </section>
   );
 }
+
+export function FixtureCsvPanel(props: {
+  csvMessage: string;
+  onExportCsv: () => void;
+  onImportCsv: (csv: string, mode: "append" | "replace") => void;
+}) {
+  const handleFileImport = (event: ChangeEvent<HTMLInputElement>, mode: "append" | "replace") => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      props.onImportCsv(String(reader.result ?? ""), mode);
+      event.target.value = "";
+    };
+    reader.readAsText(file);
+  };
+
+  return (
+    <section className="card" style={{ marginBottom: 18 }}>
+      <h3>P19 Fixture CSV Import / Export</h3>
+      <p className="section-help">
+        Bulk manage rounds, fixtures, team-stat evidence, recent form, market probabilities and final scores from a spreadsheet. Export first to get the supported column template.
+      </p>
+      <div className="actions">
+        <button className="secondary" onClick={props.onExportCsv}>Export fixtures CSV</button>
+        <label className="secondary file-action">
+          Import CSV and append
+          <input type="file" accept="text/csv,.csv" onChange={(event) => handleFileImport(event, "append")} />
+        </label>
+        <label className="secondary file-action">
+          Import CSV and replace fixtures
+          <input type="file" accept="text/csv,.csv" onChange={(event) => handleFileImport(event, "replace")} />
+        </label>
+      </div>
+      <div className="note-box">{props.csvMessage || "No CSV import/export action yet."}</div>
+    </section>
+  );
+}
