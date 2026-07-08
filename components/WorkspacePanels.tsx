@@ -267,7 +267,9 @@ export function LiveFixtureMaintenancePanel(props: {
   adminStatus: LiveFixtureAdminStatus | null;
   isAdminBusy: boolean;
   competition: string;
+  rememberAdminSecret: boolean;
   onAdminSecretChange: (value: string) => void;
+  onRememberAdminSecretChange: (remember: boolean) => void;
   onCompetitionChange: (value: string) => void;
   onCheckStatus: () => void;
   onRefreshNow: () => void;
@@ -296,6 +298,32 @@ export function LiveFixtureMaintenancePanel(props: {
           </select>
         </label>
       </div>
+      <div className="field-row">
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={props.rememberAdminSecret}
+            onChange={(event) => props.onRememberAdminSecretChange(event.target.checked)}
+          />{" "}
+          Remember this secret on this device
+        </label>
+        {props.rememberAdminSecret && (
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => props.onRememberAdminSecretChange(false)}
+          >
+            Forget saved secret
+          </button>
+        )}
+      </div>
+      {props.rememberAdminSecret && (
+        <p className="section-help" style={{ marginTop: -6 }}>
+          Stored only in this browser&apos;s local storage — never synced to the cloud, never included
+          in JSON backups. Anyone else who uses this browser profile could see it, so only enable this
+          on a device you don&apos;t share.
+        </p>
+      )}
       <div className="actions">
         <button className="secondary" onClick={props.onCheckStatus} disabled={props.isAdminBusy || !props.adminSecret.trim()}>
           {props.isAdminBusy ? "Working…" : "Check cache status"}

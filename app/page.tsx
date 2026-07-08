@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Entrant,
   Fixture,
@@ -53,6 +53,11 @@ import {
 import { exportFixturesToCsv, importFixturesFromCsv } from "../lib/csvWorkspace";
 import { generateRoundRobinFixtures, FixtureGenerationRequest } from "../lib/fixtureAutomation";
 import { fetchLiveFixtures } from "../lib/liveFixtures";
+import {
+  loadRememberedAdminSecret,
+  saveRememberedAdminSecret,
+  forgetRememberedAdminSecret,
+} from "../lib/adminSecretStorage";
 import { auditFixtureEvidence, summariseEvidenceAudits } from "../lib/evidenceAudit";
 
 export default function Home() {
@@ -70,10 +75,33 @@ export default function Home() {
   const [liveFixturesCompetition, setLiveFixturesCompetition] = useState("PL");
   const [isLoadingLiveFixtures, setIsLoadingLiveFixtures] = useState(false);
   const [liveFixtureAdminSecret, setLiveFixtureAdminSecret] = useState("");
+  const [rememberAdminSecret, setRememberAdminSecret] = useState(false);
   const [liveFixtureAdminCompetition, setLiveFixtureAdminCompetition] = useState("PL");
   const [liveFixtureAdminMessage, setLiveFixtureAdminMessage] = useState("Live fixture maintenance has not run yet.");
   const [liveFixtureAdminStatus, setLiveFixtureAdminStatus] = useState<LiveFixtureAdminStatus | null>(null);
   const [isLiveFixtureAdminBusy, setIsLiveFixtureAdminBusy] = useState(false);
+
+  useEffect(() => {
+    const remembered = loadRememberedAdminSecret();
+    if (remembered) {
+      setLiveFixtureAdminSecret(remembered);
+      setRememberAdminSecret(true);
+    }
+  }, []);
+
+  function handleAdminSecretChange(value: string) {
+    setLiveFixtureAdminSecret(value);
+    if (rememberAdminSecret) saveRememberedAdminSecret(value);
+  }
+
+  function handleRememberAdminSecretChange(remember: boolean) {
+    setRememberAdminSecret(remember);
+    if (remember) {
+      saveRememberedAdminSecret(liveFixtureAdminSecret);
+    } else {
+      forgetRememberedAdminSecret();
+    }
+  }
 
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const {
@@ -785,7 +813,9 @@ export default function Home() {
                 adminStatus={liveFixtureAdminStatus}
                 isAdminBusy={isLiveFixtureAdminBusy}
                 competition={liveFixtureAdminCompetition}
-                onAdminSecretChange={setLiveFixtureAdminSecret}
+                rememberAdminSecret={rememberAdminSecret}
+                onAdminSecretChange={handleAdminSecretChange}
+                onRememberAdminSecretChange={handleRememberAdminSecretChange}
                 onCompetitionChange={setLiveFixtureAdminCompetition}
                 onCheckStatus={() => runLiveFixtureAdminAction("status")}
                 onRefreshNow={() => runLiveFixtureAdminAction("refresh")}

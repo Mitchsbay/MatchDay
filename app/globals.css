@@ -39,6 +39,7 @@ h1 { font-size: clamp(32px, 5vw, 56px); margin: 0 0 10px; line-height: 1.02; }
 .score-input { width: 72px; padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: #020617; color: var(--text); }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
 .primary { border: 0; background: var(--blue); color: #082f49; font-weight: 800; padding: 11px 14px; border-radius: 12px; }
+.link-button { border: 0; background: none; padding: 0; color: var(--blue); font-weight: 700; text-decoration: underline; font-size: 12px; }
 
 .workspace-tabs {
   display: flex;
