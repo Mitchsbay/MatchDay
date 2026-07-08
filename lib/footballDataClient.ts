@@ -59,7 +59,11 @@ type StandingsTeam = {
 };
 
 type StandingsResponse = {
-  standings: Array<{ type: "TOTAL" | "HOME" | "AWAY"; table: StandingsTeam[] }>;
+  // group-stage tournaments (World Cup, Euros, etc.) return one entry per
+  // group, each still typed "TOTAL"/"HOME"/"AWAY" — group is what actually
+  // distinguishes them. A flat domestic league returns just one of each type
+  // with group: null.
+  standings: Array<{ type: "TOTAL" | "HOME" | "AWAY"; group: string | null; table: StandingsTeam[] }>;
 };
 
 export type TeamStatsById = Map<number, TeamStatsLike>;
@@ -67,9 +71,12 @@ export type TeamStatsById = Map<number, TeamStatsLike>;
 export async function fetchTeamStatsForCompetition(competitionCode: string): Promise<TeamStatsById> {
   const data = await getJson<StandingsResponse>(`/competitions/${competitionCode}/standings`);
 
-  const total = data.standings.find((s) => s.type === "TOTAL")?.table ?? [];
-  const home = data.standings.find((s) => s.type === "HOME")?.table ?? [];
-  const away = data.standings.find((s) => s.type === "AWAY")?.table ?? [];
+  // .filter + flatMap rather than .find: a group-stage tournament has one
+  // "TOTAL" entry per group, and .find() would silently grab only the first
+  // group, leaving every team from every other group with blank stats.
+  const total = data.standings.filter((s) => s.type === "TOTAL").flatMap((s) => s.table);
+  const home = data.standings.filter((s) => s.type === "HOME").flatMap((s) => s.table);
+  const away = data.standings.filter((s) => s.type === "AWAY").flatMap((s) => s.table);
 
   const homeById = new Map(home.map((row) => [row.team.id, row]));
   const awayById = new Map(away.map((row) => [row.team.id, row]));
