@@ -6,6 +6,8 @@ import type {
   TennisPlayerSummary,
   TennisPredictionResult,
   TennisQualityResult,
+  TennisServeGapResult,
+  TennisServeStats,
   TennisTour,
 } from "../lib/tennisScoringEngine";
 
@@ -24,6 +26,7 @@ type MatchupResponse = {
   playerBRecentForm: TennisFormResult[];
   quality: TennisQualityResult;
   form: TennisFormGapResult;
+  serve: TennisServeGapResult;
   prediction: TennisPredictionResult;
 };
 
@@ -89,6 +92,9 @@ export function TennisQuickPredictionPanel() {
   const [playerB, setPlayerB] = useState<TennisPlayerSummary | null>(null);
   const [headToHeadEdge, setHeadToHeadEdge] = useState(0);
   const [otherFactorsEdge, setOtherFactorsEdge] = useState(0);
+  const emptyServeStats: TennisServeStats = { firstServeInPct: 0, firstServeWinPct: 0, secondServeWinPct: 0 };
+  const [serveStatsA, setServeStatsA] = useState<TennisServeStats>(emptyServeStats);
+  const [serveStatsB, setServeStatsB] = useState<TennisServeStats>(emptyServeStats);
   const [isPredicting, setIsPredicting] = useState(false);
   const [predictionMessage, setPredictionMessage] = useState("");
   const [result, setResult] = useState<MatchupResponse | null>(null);
@@ -136,10 +142,19 @@ export function TennisQuickPredictionPanel() {
     setPredictionMessage("");
     try {
       const manual: TennisManualFactors = { headToHeadEdge, otherFactorsEdge };
+      const hasServeStatsA = serveStatsA.firstServeInPct > 0 || serveStatsA.firstServeWinPct > 0 || serveStatsA.secondServeWinPct > 0;
+      const hasServeStatsB = serveStatsB.firstServeInPct > 0 || serveStatsB.firstServeWinPct > 0 || serveStatsB.secondServeWinPct > 0;
       const res = await fetch("/api/tennis/matchup", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tour, playerA, playerB, manual }),
+        body: JSON.stringify({
+          tour,
+          playerA,
+          playerB,
+          manual,
+          serveStatsA: hasServeStatsA ? serveStatsA : undefined,
+          serveStatsB: hasServeStatsB ? serveStatsB : undefined,
+        }),
       });
       const payload = (await res.json()) as MatchupResponse;
       if (!res.ok || !payload.ok) {
@@ -205,6 +220,58 @@ export function TennisQuickPredictionPanel() {
         </label>
       </div>
 
+      <p className="section-help">
+        Serve Gate (optional): leave at 0 to skip it entirely. Manual for now — the exact endpoint
+        for automated serve stats hasn&apos;t been verified against a real response yet, same
+        reason rankings and form went through a verification pass before being wired up live.
+      </p>
+      <div className="field-row">
+        <label>{playerA?.name ?? "Player A"} 1st serve in %
+          <input
+            type="number"
+            value={serveStatsA.firstServeInPct}
+            onChange={(event) => setServeStatsA({ ...serveStatsA, firstServeInPct: Math.max(0, Math.min(100, Number(event.target.value))) })}
+          />
+        </label>
+        <label>1st serve win %
+          <input
+            type="number"
+            value={serveStatsA.firstServeWinPct}
+            onChange={(event) => setServeStatsA({ ...serveStatsA, firstServeWinPct: Math.max(0, Math.min(100, Number(event.target.value))) })}
+          />
+        </label>
+        <label>2nd serve win %
+          <input
+            type="number"
+            value={serveStatsA.secondServeWinPct}
+            onChange={(event) => setServeStatsA({ ...serveStatsA, secondServeWinPct: Math.max(0, Math.min(100, Number(event.target.value))) })}
+          />
+        </label>
+      </div>
+      <div className="field-row">
+        <label>{playerB?.name ?? "Player B"} 1st serve in %
+          <input
+            type="number"
+            value={serveStatsB.firstServeInPct}
+            onChange={(event) => setServeStatsB({ ...serveStatsB, firstServeInPct: Math.max(0, Math.min(100, Number(event.target.value))) })}
+          />
+        </label>
+        <label>1st serve win %
+          <input
+            type="number"
+            value={serveStatsB.firstServeWinPct}
+            onChange={(event) => setServeStatsB({ ...serveStatsB, firstServeWinPct: Math.max(0, Math.min(100, Number(event.target.value))) })}
+          />
+        </label>
+        <label>2nd serve win %
+          <input
+            type="number"
+            value={serveStatsB.secondServeWinPct}
+            onChange={(event) => setServeStatsB({ ...serveStatsB, secondServeWinPct: Math.max(0, Math.min(100, Number(event.target.value))) })}
+          />
+        </label>
+      </div>
+
       <div className="actions">
         <button className="primary" onClick={getPrediction} disabled={isPredicting || !playerA || !playerB}>
           {isPredicting ? "Working…" : "Get prediction"}
@@ -222,6 +289,9 @@ export function TennisQuickPredictionPanel() {
             {result.playerA.name}: rank {result.playerA.currentRank ?? "—"}, form{" "}
             {result.playerARecentForm.join("-") || "n/a"} · {result.playerB.name}: rank{" "}
             {result.playerB.currentRank ?? "—"}, form {result.playerBRecentForm.join("-") || "n/a"}
+            {result.serve.serveGap !== 0 && (
+              <> · Serve gap {result.serve.serveGap >= 0 ? "+" : ""}{result.serve.serveGap} ({result.serve.playerAServeScore} vs {result.serve.playerBServeScore})</>
+            )}
           </div>
         </div>
       )}

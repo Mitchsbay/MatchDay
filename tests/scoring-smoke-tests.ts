@@ -36,6 +36,8 @@ import { getLiveFixtureStaleCutoffIso, summariseLiveFixtureRows } from "../lib/l
 import { auditFixtureEvidence, describeFixtureSource, summariseEvidenceAudits } from "../lib/evidenceAudit";
 import {
   calculateFormFromRecentResults as calculateTennisForm,
+  calculateServeGap,
+  calculateServeStrength,
   calculateQualityFromRanking,
   runTennisPrediction,
   emptyTennisManualFactors,
@@ -470,6 +472,27 @@ function runTennisScoringSmokeTests() {
 
   const evenQuality = calculateQualityFromRanking(strongPlayer, strongPlayer);
   assert.equal(evenQuality.qualityGap, 0, "identical players should produce zero quality gap");
+
+  // Serve Gate: weighted by each player's own first-serve-in rate, not a
+  // fixed constant — a player who lands fewer first serves should have their
+  // second-serve win rate count for more.
+  const highFirstServeIn = calculateServeStrength({ firstServeInPct: 70, firstServeWinPct: 80, secondServeWinPct: 50 });
+  assertBetween(highFirstServeIn, 71, 72, "70% first-serve-in weighting");
+  // 0.7*80 + 0.3*50 = 56+15 = 71
+
+  const lowFirstServeIn = calculateServeStrength({ firstServeInPct: 40, firstServeWinPct: 80, secondServeWinPct: 50 });
+  assertBetween(lowFirstServeIn, 61, 62, "40% first-serve-in weighting");
+  // 0.4*80 + 0.6*50 = 32+30 = 62 -- lower first-serve-in rate should pull the
+  // weighted score down toward the (lower) second-serve rate
+  assert.ok(lowFirstServeIn < highFirstServeIn, "landing fewer first serves should reduce weighted serve strength given the same win rates");
+
+  const bigServer = { firstServeInPct: 65, firstServeWinPct: 85, secondServeWinPct: 55 };
+  const weakServer = { firstServeInPct: 65, firstServeWinPct: 55, secondServeWinPct: 40 };
+  const serveGapResult = calculateServeGap("Player A", "Player B", bigServer, weakServer);
+  assert.ok(serveGapResult.serveGap > 0, "a clearly stronger server should get a positive serve gap");
+
+  const missingServeStats = calculateServeGap("Player A", "Player B", null, null);
+  assert.equal(missingServeStats.serveGap, 0, "missing serve stats for either player should stay neutral, not crash");
 
   const strongForm = calculateTennisForm("Player A", "Player B", ["W", "W", "W", "W", "W"], ["L", "L", "L", "L", "L"]);
   assert.equal(strongForm.formGap, 10, "5-0 vs 0-5 recent form should hit the max +10 gap");

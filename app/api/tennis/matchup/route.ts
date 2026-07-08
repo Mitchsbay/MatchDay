@@ -3,10 +3,12 @@ import { fetchTennisRecentForm } from "../../../../lib/tennisDataClient";
 import {
   calculateQualityFromRanking,
   calculateFormFromRecentResults,
+  calculateServeGap,
   runTennisPrediction,
   emptyTennisManualFactors,
   type TennisManualFactors,
   type TennisPlayerSummary,
+  type TennisServeStats,
   type TennisTour,
 } from "../../../../lib/tennisScoringEngine";
 
@@ -17,6 +19,11 @@ export async function POST(req: NextRequest) {
       playerA?: TennisPlayerSummary;
       playerB?: TennisPlayerSummary;
       manual?: Partial<TennisManualFactors>;
+      // Manual for now — serve stats aren't wired to a live fetch yet since
+      // the exact endpoint (getPlayerMatchStats or similar) hasn't been
+      // verified against a real response the way rankings/form were.
+      serveStatsA?: TennisServeStats;
+      serveStatsB?: TennisServeStats;
     };
 
     if (!body.playerA || !body.playerB) {
@@ -39,7 +46,13 @@ export async function POST(req: NextRequest) {
 
     const quality = calculateQualityFromRanking(playerA, playerB);
     const form = calculateFormFromRecentResults(playerA.name, playerB.name, playerARecentForm, playerBRecentForm);
-    const prediction = runTennisPrediction(playerA.name, playerB.name, quality, form, manual);
+    const serve = calculateServeGap(
+      playerA.name,
+      playerB.name,
+      body.serveStatsA ?? null,
+      body.serveStatsB ?? null,
+    );
+    const prediction = runTennisPrediction(playerA.name, playerB.name, quality, form, manual, serve);
 
     return NextResponse.json({
       ok: true,
@@ -50,6 +63,7 @@ export async function POST(req: NextRequest) {
       playerBRecentForm,
       quality,
       form,
+      serve,
       prediction,
     });
   } catch (err) {

@@ -124,6 +124,62 @@ export function calculateFormFromRecentResults(
   };
 }
 
+// --- Serve Gate: weighted serve strength --------------------------------
+// Unlike a fixed 0.63/0.37 first/second-serve split applied to everyone,
+// this weights each player's own first-serve-in rate — a player who lands
+// 68% of first serves should have their 1st-serve win rate count for more
+// than one who lands 55%, since it reflects how often they actually get to
+// use it. This also naturally supports per-surface stats later (grass vs
+// clay serve stats plugged into the same function) without any changes here.
+export type TennisServeStats = {
+  firstServeInPct: number; // 0-100: % of first serves landed in
+  firstServeWinPct: number; // 0-100: % of points won when the first serve lands
+  secondServeWinPct: number; // 0-100: % of points won on second serve
+};
+
+export type TennisServeGapResult = {
+  serveGap: number; // -10..+10, positive favours player A
+  playerAServeScore: number; // 0-100 weighted serve strength
+  playerBServeScore: number;
+  evidence: string[];
+};
+
+export function calculateServeStrength(stats: TennisServeStats): number {
+  const firstServeWeight = Math.max(0, Math.min(1, stats.firstServeInPct / 100));
+  return firstServeWeight * stats.firstServeWinPct + (1 - firstServeWeight) * stats.secondServeWinPct;
+}
+
+export function calculateServeGap(
+  playerAName: string,
+  playerBName: string,
+  statsA: TennisServeStats | null,
+  statsB: TennisServeStats | null,
+): TennisServeGapResult {
+  if (!statsA || !statsB) {
+    return {
+      serveGap: 0,
+      playerAServeScore: 0,
+      playerBServeScore: 0,
+      evidence: ["Serve stats not available for one or both players — Serve Gate stays neutral."],
+    };
+  }
+
+  const scoreA = calculateServeStrength(statsA);
+  const scoreB = calculateServeStrength(statsB);
+  const serveGap = Math.max(-10, Math.min(10, Math.round((scoreA - scoreB) / 2)));
+
+  return {
+    serveGap,
+    playerAServeScore: Math.round(scoreA),
+    playerBServeScore: Math.round(scoreB),
+    evidence: [
+      `${playerAName} weighted serve strength: ${Math.round(scoreA)}/100 (1st serve in ${statsA.firstServeInPct}%, 1st-serve win ${statsA.firstServeWinPct}%, 2nd-serve win ${statsA.secondServeWinPct}%).`,
+      `${playerBName} weighted serve strength: ${Math.round(scoreB)}/100 (1st serve in ${statsB.firstServeInPct}%, 1st-serve win ${statsB.firstServeWinPct}%, 2nd-serve win ${statsB.secondServeWinPct}%).`,
+      `Serve gap ${serveGap >= 0 ? "+" : ""}${serveGap} (positive favours ${playerAName}).`,
+    ],
+  };
+}
+
 // --- Prediction: combine gates, no draw outcome exists -----------------------
 export function runTennisPrediction(
   playerAName: string,
@@ -131,9 +187,11 @@ export function runTennisPrediction(
   quality: TennisQualityResult,
   form: TennisFormGapResult,
   manual: TennisManualFactors,
+  serve: TennisServeGapResult | null = null,
 ): TennisPredictionResult {
+  const serveGap = serve?.serveGap ?? 0;
   const playerAEdge =
-    quality.qualityGap + form.formGap + manual.headToHeadEdge + manual.otherFactorsEdge;
+    quality.qualityGap + form.formGap + serveGap + manual.headToHeadEdge + manual.otherFactorsEdge;
 
   // Quality and form pulling in opposite directions by a wide margin is a
   // genuine reason for caution, same principle as football's Conflict Gate —
@@ -168,6 +226,7 @@ export function runTennisPrediction(
   const evidence = [
     ...quality.evidence,
     ...form.evidence,
+    ...(serve?.evidence ?? []),
     manual.headToHeadEdge !== 0
       ? `Manual head-to-head edge: ${manual.headToHeadEdge >= 0 ? "+" : ""}${manual.headToHeadEdge}.`
       : null,
