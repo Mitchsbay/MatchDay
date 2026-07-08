@@ -40,6 +40,7 @@ import {
   calculateServeGap,
   calculateServeStrength,
   calculateSurfaceGap,
+  calculateHeadToHeadGap,
   calculateQualityFromRanking,
   runTennisPrediction,
   emptyTennisManualFactors,
@@ -679,6 +680,35 @@ function runTennisScoringSmokeTests() {
 
   const noSurfaceData = calculateSurfaceGap("Player A", "Player B", null, null, "Grass");
   assert.equal(noSurfaceData.surfaceGap, 0, "missing surface data for either player should stay neutral, not crash");
+
+  // Locked to the exact real getH2HInfo response captured (Djokovic vs an
+  // opponent, id 5992 vs 677): Hard 16-5, Clay 9-20, I.hard 4-1, Carpet 0-1,
+  // Grass 2-2 -> totals 31-29, an almost-even H2H that should round to 0.
+  const closeH2H = calculateHeadToHeadGap("Player A", "Player B", { playerAWins: 31, playerBWins: 29 });
+  assert.equal(closeH2H.headToHeadGap, 0, "an almost-even 31-29 H2H record should round to a neutral gap");
+
+  const dominantH2H = calculateHeadToHeadGap("Player A", "Player B", { playerAWins: 18, playerBWins: 2 });
+  assert.ok(dominantH2H.headToHeadGap > 0, "a lopsided H2H record should produce a clearly positive gap");
+
+  const noH2H = calculateHeadToHeadGap("Player A", "Player B", null);
+  assert.equal(noH2H.headToHeadGap, 0, "no head-to-head history should stay neutral, not crash");
+
+  // runTennisPrediction: manual head-to-head edge should override the
+  // automatic H2H gap, not add on top of it.
+  const neutralGates = { qualityGap: 0, playerAStrength: 50, playerBStrength: 50, evidence: [] };
+  const neutralForm = { formGap: 0, playerAFormScore: 50, playerBFormScore: 50, evidence: [] };
+  const strongAutoH2H = calculateHeadToHeadGap("Player A", "Player B", { playerAWins: 18, playerBWins: 2 });
+
+  const usingAutomaticH2H = runTennisPrediction(
+    "Player A", "Player B", neutralGates, neutralForm, emptyTennisManualFactors, null, null, strongAutoH2H,
+  );
+  assert.equal(usingAutomaticH2H.playerAEdge, strongAutoH2H.headToHeadGap, "with no manual override, the automatic H2H gap should drive the edge");
+
+  const overriddenH2H = runTennisPrediction(
+    "Player A", "Player B", neutralGates, neutralForm,
+    { headToHeadEdge: -5, otherFactorsEdge: 0 }, null, null, strongAutoH2H,
+  );
+  assert.equal(overriddenH2H.playerAEdge, -5, "a non-zero manual head-to-head edge should override the automatic H2H gap, not add to it");
 }
 
 
