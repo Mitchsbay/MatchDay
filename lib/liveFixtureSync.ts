@@ -2,6 +2,7 @@ import {
   fetchTeamStatsForCompetition,
   fetchUpcomingMatches,
   fetchRecentFormForTeams,
+  type TeamStatsById,
 } from "./footballDataClient";
 import { getSupabaseServiceRoleClient } from "./supabaseServerClient";
 
@@ -38,8 +39,18 @@ export async function syncLiveFixtures(
   competitionCode = DEFAULT_LIVE_FIXTURE_COMPETITION,
   daysAhead = DEFAULT_LIVE_FIXTURE_DAYS_AHEAD,
 ): Promise<LiveFixtureSyncResult> {
+  // Team stats come from a standings table, which some competitions don't
+  // have at all (e.g. a knockout-stage World Cup has no single league table).
+  // A failure here shouldn't block fixtures/form, which are independent —
+  // fall back to an empty map so every team just gets the emptyStats default.
   const [teamStatsById, upcomingMatches] = await Promise.all([
-    fetchTeamStatsForCompetition(competitionCode),
+    fetchTeamStatsForCompetition(competitionCode).catch((err): TeamStatsById => {
+      console.warn(
+        `[live-fixtures] Could not fetch team stats for ${competitionCode}, continuing with blank stats:`,
+        err instanceof Error ? err.message : err,
+      );
+      return new Map();
+    }),
     fetchUpcomingMatches(competitionCode, daysAhead),
   ]);
 
