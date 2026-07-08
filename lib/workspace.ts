@@ -20,8 +20,9 @@ import {
 
 export const ALL_ROUNDS = "__all_rounds__";
 
-export const STORAGE_KEY = "tipping-gates-app-p26-state-v1";
+export const STORAGE_KEY = "tipping-gates-app-p27-state-v1";
 export const LEGACY_STORAGE_KEYS = [
+  "tipping-gates-app-p26-state-v1",
   "tipping-gates-app-p25-state-v1",
   "tipping-gates-app-p24-3-state-v1",
   "tipping-gates-app-p24-2-state-v1",
@@ -37,8 +38,9 @@ export const LEGACY_STORAGE_KEYS = [
   "tipping-gates-app-p12-state-v1",
   "tipping-gates-app-p11-state-v1",
 ];
-export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p26-cloud-workspace-id";
+export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p27-cloud-workspace-id";
 export const LEGACY_CLOUD_WORKSPACE_ID_KEYS = [
+  "tipping-gates-app-p26-cloud-workspace-id",
   "tipping-gates-app-p25-cloud-workspace-id",
   "tipping-gates-app-p24-3-cloud-workspace-id",
   "tipping-gates-app-p24-2-cloud-workspace-id",
@@ -123,7 +125,7 @@ export function createPersistedState(
   teamAliases: TeamAliasRule[] = [],
 ): PersistedAppState {
   return {
-    version: "0.26.0",
+    version: "0.27.0",
     savedAt: new Date().toISOString(),
     fixtures: cloneFixtures(fixtures),
     activeFixtureId,

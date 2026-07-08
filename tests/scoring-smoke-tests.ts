@@ -59,6 +59,7 @@ import {
   getAwayTeamsForMatchup,
   getTeamsForCompetition,
 } from "../lib/quickPrediction";
+import { getCompetitionNames, summariseCompetition } from "../lib/competitionInsights";
 
 function assertBetween(value: number, min: number, max: number, label: string) {
   assert.ok(
@@ -806,6 +807,44 @@ function runTeamAliasSmokeTests() {
   assert.ok(issues.some((issue) => issue.variants.includes("Sao Paulo") && issue.variants.includes("São Paulo")));
 }
 
+
+function runCompetitionInsightsSmokeTests() {
+  const finalOne = createBlankFixture("Round 1", "Smoke League");
+  finalOne.id = "smoke-final-1";
+  finalOne.date = "2026-01-01";
+  finalOne.homeTeam = "Lions";
+  finalOne.awayTeam = "Tigers";
+  finalOne.matchResult = { status: "final", homeGoals: 2, awayGoals: 1 };
+  finalOne.homeStats = { ...finalOne.homeStats, played: 3, points: 7, wins: 2, draws: 1, losses: 0, goalsFor: 6, goalsAgainst: 2 };
+  finalOne.awayStats = { ...finalOne.awayStats, played: 3, points: 4, wins: 1, draws: 1, losses: 1, goalsFor: 4, goalsAgainst: 4 };
+
+  const finalTwo = createBlankFixture("Round 2", "Smoke League");
+  finalTwo.id = "smoke-final-2";
+  finalTwo.date = "2026-01-08";
+  finalTwo.homeTeam = "Tigers";
+  finalTwo.awayTeam = "Bears";
+  finalTwo.matchResult = { status: "final", homeGoals: 0, awayGoals: 0 };
+
+  const pending = createBlankFixture("Round 3", "Smoke League");
+  pending.id = "smoke-pending";
+  pending.date = "2026-01-15";
+  pending.homeTeam = "Lions";
+  pending.awayTeam = "Bears";
+
+  const names = getCompetitionNames([finalOne, finalTwo, pending]);
+  assert.deepEqual(names, ["Smoke League"]);
+
+  const insights = summariseCompetition([finalOne, finalTwo, pending], "Smoke League");
+  assert.equal(insights.fixtureCount, 3);
+  assert.equal(insights.finalResultCount, 2);
+  assert.equal(insights.pendingFixtureCount, 1);
+  assert.equal(insights.teamCount, 3);
+  assert.equal(insights.resultStandings[0].team, "Lions");
+  assert.equal(insights.resultStandings[0].points, 3);
+  assert.ok(insights.evidenceStandings.some((row) => row.team === "Lions" && row.points === 7));
+  assert.equal(insights.recentResults.length, 2);
+}
+
 function runLiveFixtureMaintenanceSmokeTests() {
   const now = new Date("2026-07-08T00:00:00.000Z");
   const cutoff = getLiveFixtureStaleCutoffIso(now, 14);
@@ -842,7 +881,8 @@ runLiveFixtureMaintenanceSmokeTests();
 runCustomCompetitionImportSmokeTests();
 runImportPreviewSmokeTests();
 runTeamAliasSmokeTests();
+runCompetitionInsightsSmokeTests();
 runQuickPredictionSmokeTests();
 runTennisScoringSmokeTests();
 
-console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, custom competition import, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns, import previews, team aliases and tennis scoring engine.");
+console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, custom competition import, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns, import previews, team aliases, competition insights and tennis scoring engine.");

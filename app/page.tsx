@@ -34,7 +34,7 @@ import { useWorkspaceCloudSync } from "../hooks/useWorkspaceCloudSync";
 import { FixtureList } from "../components/FixtureList";
 import { RoundManagement } from "../components/RoundManagement";
 import { WorkspacePersistencePanel, CloudSyncPanel, CustomCompetitionImportPanel, FixtureCsvPanel, FixtureAutomationPanel, LiveFixturesPanel, LiveFixtureMaintenancePanel, TeamAliasManagerPanel, type LiveFixtureAdminStatus } from "../components/WorkspacePanels";
-import { AccuracyDashboard, EvidenceReadinessPanel, LeaderboardPanel, RuleLearningPanel, RuleWeightTuningPanel } from "../components/DashboardPanels";
+import { AccuracyDashboard, CompetitionInsightsPanel, EvidenceReadinessPanel, LeaderboardPanel, RuleLearningPanel, RuleWeightTuningPanel } from "../components/DashboardPanels";
 import { PredictionSummaryPanel, FixtureDetailsPanel, EntrantsPicksPanel, ResultInputsPanel } from "../components/FixturePanels";
 import { QuickPredictionPanel } from "../components/QuickPredictionPanel";
 import { TennisQuickPredictionPanel } from "../components/TennisPanels";
@@ -64,6 +64,7 @@ import {
 } from "../lib/adminSecretStorage";
 import { auditFixtureEvidence, summariseEvidenceAudits } from "../lib/evidenceAudit";
 import { DEFAULT_TEAM_ALIAS_RULES, TeamAliasRule, applyTeamAliasesToFixtures, cloneTeamAliases, detectTeamNameIssues } from "../lib/teamAliases";
+import { getCompetitionNames, summariseCompetition } from "../lib/competitionInsights";
 
 export default function Home() {
   type WorkspaceTab = "tip" | "evidence" | "data" | "analytics" | "competition" | "tennis";
@@ -75,6 +76,7 @@ export default function Home() {
   const [entrants, setEntrants] = useState<Entrant[]>(() => cloneEntrants(initialEntrants));
   const [userTips, setUserTips] = useState<UserTip[]>(() => cloneUserTips(initialUserTips));
   const [teamAliases, setTeamAliases] = useState<TeamAliasRule[]>(() => cloneTeamAliases(DEFAULT_TEAM_ALIAS_RULES));
+  const [selectedCompetitionView, setSelectedCompetitionView] = useState("");
   const [csvMessage, setCsvMessage] = useState("CSV import/export has not run yet.");
   const [customCompetitionMessage, setCustomCompetitionMessage] = useState("Custom competition import has not run yet.");
   const [automationMessage, setAutomationMessage] = useState("Fixture automation has not run yet.");
@@ -196,6 +198,21 @@ export default function Home() {
       (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
     );
   }, [fixtures]);
+
+
+  const competitionNames = useMemo(() => getCompetitionNames(fixtures), [fixtures]);
+
+  useEffect(() => {
+    if (competitionNames.length === 0) return;
+    if (!selectedCompetitionView || !competitionNames.includes(selectedCompetitionView)) {
+      setSelectedCompetitionView(competitionNames[0]);
+    }
+  }, [competitionNames, selectedCompetitionView]);
+
+  const competitionInsights = useMemo(
+    () => summariseCompetition(fixtures, selectedCompetitionView || competitionNames[0] || ""),
+    [fixtures, selectedCompetitionView, competitionNames],
+  );
 
   const visibleFixtureResults = useMemo(() => {
     if (selectedRound === ALL_ROUNDS) return computedFixtureResults;
@@ -870,10 +887,10 @@ export default function Home() {
     <main className="container">
       <section className="header">
         <div>
-          <div className="eyebrow">Tipping Gates App · P26</div>
+          <div className="eyebrow">Tipping Gates App · P27</div>
           <h1>Evidence-based tipping gates with evidence readiness audits.</h1>
           <p className="lead">
-            P26 adds a team alias / name normalisation manager so weekly imports can safely handle Sao Paulo vs São Paulo, Gremio vs Grêmio and similar naming differences.
+            P27 adds a competition results history and standings view so imported leagues can be checked before you trust the prediction engine.
           </p>
         </div>
         <button className="primary" onClick={addBlankFixture}>Add Fixture</button>
@@ -1076,6 +1093,12 @@ export default function Home() {
 
           {activeTab === "competition" && (
             <>
+              <CompetitionInsightsPanel
+                competitionNames={competitionNames}
+                selectedCompetition={competitionInsights.competition}
+                insights={competitionInsights}
+                onCompetitionChange={setSelectedCompetitionView}
+              />
               <EntrantsPicksPanel
                 fixture={activeFixture}
                 entrants={entrants}
