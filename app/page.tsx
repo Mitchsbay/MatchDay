@@ -37,6 +37,7 @@ import { WorkspacePersistencePanel, CloudSyncPanel, FixtureCsvPanel, FixtureAuto
 import { AccuracyDashboard, EvidenceReadinessPanel, LeaderboardPanel, RuleLearningPanel, RuleWeightTuningPanel } from "../components/DashboardPanels";
 import { PredictionSummaryPanel, FixtureDetailsPanel, EntrantsPicksPanel, ResultInputsPanel } from "../components/FixturePanels";
 import { QuickPredictionPanel } from "../components/QuickPredictionPanel";
+import { TennisQuickPredictionPanel } from "../components/TennisPanels";
 import { TeamStrengthInputsPanel, RecentFormInputsPanel, AvailabilityInputsPanel, ContextInputsPanel, OddsInputsPanel, GateEvidencePanels, ManualGateInputsPanel, PredictionGatesPanel } from "../components/EvidenceInputPanels";
 import {
   ALL_ROUNDS,
@@ -61,7 +62,7 @@ import {
 import { auditFixtureEvidence, summariseEvidenceAudits } from "../lib/evidenceAudit";
 
 export default function Home() {
-  type WorkspaceTab = "tip" | "evidence" | "data" | "analytics" | "competition";
+  type WorkspaceTab = "tip" | "evidence" | "data" | "analytics" | "competition" | "tennis";
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("tip");
   const [fixtures, setFixtures] = useState<Fixture[]>(() => cloneFixtures(initialFixtures));
   const [activeFixtureId, setActiveFixtureId] = useState(fixtures[0]?.id ?? "");
@@ -721,6 +722,9 @@ export default function Home() {
         <button className={activeTab === "competition" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("competition")}>
           Competition
         </button>
+        <button className={activeTab === "tennis" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("tennis")}>
+          Tennis
+        </button>
       </nav>
 
       <section className="grid">
@@ -881,6 +885,8 @@ export default function Home() {
               <LeaderboardPanel leaderboard={leaderboard} selectedRoundLabel={selectedRoundLabel} />
             </>
           )}
+
+          {activeTab === "tennis" && <TennisQuickPredictionPanel />}
         </div>
       </section>
     </main>

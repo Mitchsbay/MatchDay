@@ -35,6 +35,14 @@ import { mapLiveFixtureRow, type LiveFixtureRow } from "../lib/liveFixtures";
 import { getLiveFixtureStaleCutoffIso, summariseLiveFixtureRows } from "../lib/liveFixtureMaintenance";
 import { auditFixtureEvidence, describeFixtureSource, summariseEvidenceAudits } from "../lib/evidenceAudit";
 import {
+  calculateFormFromRecentResults as calculateTennisForm,
+  calculateQualityFromRanking,
+  runTennisPrediction,
+  emptyTennisManualFactors,
+  type TennisPlayerSummary,
+} from "../lib/tennisScoringEngine";
+import { formatDateDDMMYYYY, mostRecentMonday } from "../lib/tennisDataClient";
+import {
   findFixtureForMatchup,
   getAvailableCompetitions,
   getAwayTeamsForMatchup,
@@ -452,6 +460,78 @@ function runQuickPredictionSmokeTests() {
   assert.deepEqual(getHomeTeamsForCompetition(fixtures, "Nonexistent League"), []);
 }
 
+function runTennisScoringSmokeTests() {
+  const strongPlayer: TennisPlayerSummary = { id: 1, name: "Player A", countryAcr: null, currentRank: 1, points: 11000 };
+  const weakPlayer: TennisPlayerSummary = { id: 2, name: "Player B", countryAcr: null, currentRank: 250, points: 400 };
+
+  const quality = calculateQualityFromRanking(strongPlayer, weakPlayer);
+  assert.ok(quality.qualityGap > 0, "a much higher-ranked player should get a positive quality gap");
+  assert.ok(quality.qualityGap <= 10, "quality gap should stay within the -10..+10 scale");
+
+  const evenQuality = calculateQualityFromRanking(strongPlayer, strongPlayer);
+  assert.equal(evenQuality.qualityGap, 0, "identical players should produce zero quality gap");
+
+  const strongForm = calculateTennisForm("Player A", "Player B", ["W", "W", "W", "W", "W"], ["L", "L", "L", "L", "L"]);
+  assert.equal(strongForm.formGap, 10, "5-0 vs 0-5 recent form should hit the max +10 gap");
+  assert.equal(strongForm.playerAFormScore, 100);
+  assert.equal(strongForm.playerBFormScore, 0);
+
+  const noForm = calculateTennisForm("Player A", "Player B", [], []);
+  assert.equal(noForm.formGap, 0, "no recorded matches for either player should be neutral, not a crash");
+
+  const dominant = runTennisPrediction("Player A", "Player B", quality, strongForm, emptyTennisManualFactors);
+  assert.equal(dominant.prediction, "Very Strong Player A Win");
+  assert.equal(dominant.reviewRequired, false);
+
+  const conflicting = runTennisPrediction(
+    "Player A",
+    "Player B",
+    { qualityGap: 9, playerAStrength: 100, playerBStrength: 10, evidence: [] },
+    { formGap: -9, playerAFormScore: 0, playerBFormScore: 100, evidence: [] },
+    emptyTennisManualFactors,
+  );
+  assert.equal(conflicting.prediction, "Review Required", "strongly opposing quality/form signals should trigger review");
+  assert.equal(conflicting.reviewRequired, true);
+
+  const tooClose = runTennisPrediction(
+    "Player A",
+    "Player B",
+    { qualityGap: 0, playerAStrength: 50, playerBStrength: 50, evidence: [] },
+    { formGap: 0, playerAFormScore: 50, playerBFormScore: 50, evidence: [] },
+    emptyTennisManualFactors,
+  );
+  assert.equal(tooClose.prediction, "Too Close to Call");
+
+  const manualSwing = runTennisPrediction(
+    "Player A",
+    "Player B",
+    { qualityGap: 0, playerAStrength: 50, playerBStrength: 50, evidence: [] },
+    { formGap: 0, playerAFormScore: 50, playerBFormScore: 50, evidence: [] },
+    { headToHeadEdge: 9, otherFactorsEdge: 0 },
+  );
+  assert.equal(manualSwing.prediction, "Very Strong Player A Win", "manual H2H edge alone should be able to swing the verdict");
+
+  // Verified directly against a real API response: requesting date=08.06.2026
+  // returned rows dated "2026-06-08", confirming the format is DD.MM.YYYY.
+  assert.equal(formatDateDDMMYYYY(new Date("2026-06-08T00:00:00.000Z")), "08.06.2026");
+
+  // Wednesday July 8, 2026 -> the Monday of that same week is July 6, 2026.
+  const monday = mostRecentMonday(new Date("2026-07-08T00:00:00.000Z"));
+  assert.equal(formatDateDDMMYYYY(monday), "06.07.2026");
+
+  // A Monday should map to itself, and a Sunday should map back six days.
+  assert.equal(
+    formatDateDDMMYYYY(mostRecentMonday(new Date("2026-07-06T00:00:00.000Z"))),
+    "06.07.2026",
+    "a Monday should map to itself",
+  );
+  assert.equal(
+    formatDateDDMMYYYY(mostRecentMonday(new Date("2026-07-12T00:00:00.000Z"))),
+    "06.07.2026",
+    "the Sunday at the end of the week should still map back to that week's Monday",
+  );
+}
+
 function runLiveFixtureMaintenanceSmokeTests() {
   const now = new Date("2026-07-08T00:00:00.000Z");
   const cutoff = getLiveFixtureStaleCutoffIso(now, 14);
@@ -486,5 +566,6 @@ runWorkspaceBatchAndLiveFixturesSmokeTests();
 runEvidenceAuditSmokeTests();
 runLiveFixtureMaintenanceSmokeTests();
 runQuickPredictionSmokeTests();
+runTennisScoringSmokeTests();
 
-console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance and quick prediction dropdowns.");
+console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns and tennis scoring engine.");
