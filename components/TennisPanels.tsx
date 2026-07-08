@@ -221,9 +221,10 @@ export function TennisQuickPredictionPanel() {
       </div>
 
       <p className="section-help">
-        Serve Gate (optional): leave at 0 to skip it entirely. Manual for now — the exact endpoint
-        for automated serve stats hasn&apos;t been verified against a real response yet, same
-        reason rankings and form went through a verification pass before being wired up live.
+        Serve Gate: fetched automatically from career serve stats (no surface breakdown available on
+        this endpoint — one number covering a player&apos;s whole career). Leave the fields below at 0
+        to use the automatic numbers; fill them in only if you want to override with fresher or
+        surface-specific stats from elsewhere.
       </p>
       <div className="field-row">
         <label>{playerA?.name ?? "Player A"} 1st serve in %

@@ -8,7 +8,7 @@
 // differs per endpoint: bare array, {data: [...]}, and {data, hasNextPage}
 // all appear across three different endpoints in the same API).
 
-import type { TennisFormResult, TennisPlayerSummary, TennisTour } from "./tennisScoringEngine";
+import type { TennisFormResult, TennisPlayerSummary, TennisServeStats, TennisTour } from "./tennisScoringEngine";
 
 const BASE_URL = "https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2";
 const HOST = "tennis-api-atp-wta-itf.p.rapidapi.com";
@@ -115,4 +115,59 @@ export async function fetchTennisRecentForm(
     .filter((match) => match.result_type === "completed")
     .slice(0, limit)
     .map((match): TennisFormResult => (match.match_winner === playerId ? "W" : "L"));
+}
+
+// --- Serve stats: career-total counts, converted to percentages -------------
+// Verified against a real response for Djokovic (id 5992): the raw numbers
+// are lifetime totals (e.g. acesGm: 7882), not a percentage or single-match
+// stat, and there's no surface parameter on this endpoint at all — it's one
+// career-wide number, not "how they serve on clay." The derived percentages
+// (~65% first-serve-in, ~74% first-serve win, ~56% second-serve win) land
+// exactly where real ATP career stats should, which is what gives confidence
+// the field mapping below is actually correct rather than a lucky guess.
+
+type MatchStatsResponse = {
+  data: {
+    serviceStats: {
+      firstServeGm: number; // first serves that landed in
+      firstServeOfGm: number; // first serves attempted
+      winningOnFirstServeGm: number; // points won when the first serve landed
+      winningOnFirstServeOfGm: number; // equals firstServeGm — the denominator
+      winningOnSecondServeGm: number; // points won on second serve
+      winningOnSecondServeOfGm: number; // second-serve points played
+    };
+  };
+};
+
+// Pure and exported separately so the conversion math can be locked in with
+// a smoke test against the exact real numbers this was verified against
+// (Djokovic, player id 5992), without needing a live network call to test it.
+export function convertMatchStatsToServeStats(
+  stats: MatchStatsResponse["data"]["serviceStats"] | null | undefined,
+): TennisServeStats | null {
+  if (!stats || stats.firstServeOfGm === 0) return null;
+
+  const firstServeInPct = (stats.firstServeGm / stats.firstServeOfGm) * 100;
+  const firstServeWinPct =
+    stats.winningOnFirstServeOfGm > 0
+      ? (stats.winningOnFirstServeGm / stats.winningOnFirstServeOfGm) * 100
+      : 0;
+  const secondServeWinPct =
+    stats.winningOnSecondServeOfGm > 0
+      ? (stats.winningOnSecondServeGm / stats.winningOnSecondServeOfGm) * 100
+      : 0;
+
+  return {
+    firstServeInPct: Math.round(firstServeInPct * 10) / 10,
+    firstServeWinPct: Math.round(firstServeWinPct * 10) / 10,
+    secondServeWinPct: Math.round(secondServeWinPct * 10) / 10,
+  };
+}
+
+export async function fetchTennisServeStats(
+  tour: TennisTour,
+  playerId: number,
+): Promise<TennisServeStats | null> {
+  const data = await getJson<MatchStatsResponse>(`/${tour}/player/match-stats/${playerId}`);
+  return convertMatchStatsToServeStats(data.data?.serviceStats);
 }

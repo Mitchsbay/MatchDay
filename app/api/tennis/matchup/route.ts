@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchTennisRecentForm } from "../../../../lib/tennisDataClient";
+import { fetchTennisRecentForm, fetchTennisServeStats } from "../../../../lib/tennisDataClient";
 import {
   calculateQualityFromRanking,
   calculateFormFromRecentResults,
@@ -19,9 +19,9 @@ export async function POST(req: NextRequest) {
       playerA?: TennisPlayerSummary;
       playerB?: TennisPlayerSummary;
       manual?: Partial<TennisManualFactors>;
-      // Manual for now — serve stats aren't wired to a live fetch yet since
-      // the exact endpoint (getPlayerMatchStats or similar) hasn't been
-      // verified against a real response the way rankings/form were.
+      // Optional manual override — if provided, takes precedence over the
+      // automatic fetch below (e.g. if you have fresher or surface-specific
+      // numbers from elsewhere). Leave unset to use the automatic fetch.
       serveStatsA?: TennisServeStats;
       serveStatsB?: TennisServeStats;
     };
@@ -36,22 +36,22 @@ export async function POST(req: NextRequest) {
     const playerB = body.playerB;
 
     // Rank/points already came from the rankings list the dropdown loaded —
-    // no need to re-fetch a player profile just for that. Only recent form
-    // needs its own call, keeping this at 2 requests per prediction instead
-    // of 4, which matters on a 50-requests/day free quota.
-    const [playerARecentForm, playerBRecentForm] = await Promise.all([
+    // no need to re-fetch a player profile just for that. Form and serve
+    // stats each need their own call: 4 requests per prediction total,
+    // comfortably inside the 50/day free quota (~12 predictions/day).
+    const [playerARecentForm, playerBRecentForm, fetchedServeStatsA, fetchedServeStatsB] = await Promise.all([
       fetchTennisRecentForm(tour, playerA.id),
       fetchTennisRecentForm(tour, playerB.id),
+      body.serveStatsA ? Promise.resolve(null) : fetchTennisServeStats(tour, playerA.id),
+      body.serveStatsB ? Promise.resolve(null) : fetchTennisServeStats(tour, playerB.id),
     ]);
+
+    const serveStatsA = body.serveStatsA ?? fetchedServeStatsA;
+    const serveStatsB = body.serveStatsB ?? fetchedServeStatsB;
 
     const quality = calculateQualityFromRanking(playerA, playerB);
     const form = calculateFormFromRecentResults(playerA.name, playerB.name, playerARecentForm, playerBRecentForm);
-    const serve = calculateServeGap(
-      playerA.name,
-      playerB.name,
-      body.serveStatsA ?? null,
-      body.serveStatsB ?? null,
-    );
+    const serve = calculateServeGap(playerA.name, playerB.name, serveStatsA, serveStatsB);
     const prediction = runTennisPrediction(playerA.name, playerB.name, quality, form, manual, serve);
 
     return NextResponse.json({

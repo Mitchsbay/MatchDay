@@ -43,7 +43,7 @@ import {
   emptyTennisManualFactors,
   type TennisPlayerSummary,
 } from "../lib/tennisScoringEngine";
-import { formatDateDDMMYYYY, mostRecentMonday } from "../lib/tennisDataClient";
+import { formatDateDDMMYYYY, mostRecentMonday, convertMatchStatsToServeStats } from "../lib/tennisDataClient";
 import {
   findFixtureForMatchup,
   getAvailableCompetitions,
@@ -552,6 +552,41 @@ function runTennisScoringSmokeTests() {
     formatDateDDMMYYYY(mostRecentMonday(new Date("2026-07-12T00:00:00.000Z"))),
     "06.07.2026",
     "the Sunday at the end of the week should still map back to that week's Monday",
+  );
+
+  // Locked to the exact real getPlayerMatchStats response captured for
+  // Djokovic (player id 5992) — if this ever stops matching, the API's field
+  // meanings have changed and the conversion needs re-verifying, not just
+  // re-trusting.
+  const djokovicServeStats = convertMatchStatsToServeStats({
+    firstServeGm: 68858,
+    firstServeOfGm: 105916,
+    winningOnFirstServeGm: 51208,
+    winningOnFirstServeOfGm: 68858,
+    winningOnSecondServeGm: 20622,
+    winningOnSecondServeOfGm: 37061,
+  });
+  assert.ok(djokovicServeStats, "should convert a real serviceStats payload successfully");
+  assert.equal(djokovicServeStats?.firstServeInPct, 65);
+  assert.equal(djokovicServeStats?.firstServeWinPct, 74.4);
+  assert.equal(djokovicServeStats?.secondServeWinPct, 55.6);
+
+  assert.equal(
+    convertMatchStatsToServeStats(null),
+    null,
+    "missing serviceStats should return null rather than throw",
+  );
+  assert.equal(
+    convertMatchStatsToServeStats({
+      firstServeGm: 0,
+      firstServeOfGm: 0,
+      winningOnFirstServeGm: 0,
+      winningOnFirstServeOfGm: 0,
+      winningOnSecondServeGm: 0,
+      winningOnSecondServeOfGm: 0,
+    }),
+    null,
+    "a player with no logged matches (all zeros) should return null, not divide by zero",
   );
 }
 
