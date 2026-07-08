@@ -71,11 +71,23 @@ npm run build
 ```
 
 
-## P24.1 — Quick Prediction Team Dropdown Fix
+## P24.2 — Quick Prediction Team Dropdown Fix
 
-P24.1 fixes the Quick Prediction team dropdown behaviour for imported/custom competitions.
+P24.2 fixes the Quick Prediction team dropdown behaviour for imported/custom competitions.
 
 - The home-team dropdown now lists every team found in the selected competition, not only teams that appear as a home side.
 - The away-team dropdown now lists every other team in that competition, not only teams that already appear as an away opponent for the selected home team.
 - If the selected matchup is not currently present as a fixture, the existing warning still appears instead of silently selecting the wrong match.
 - Added smoke-test coverage so the away dropdown does not collapse to a single scheduled opponent again.
+
+
+## P24.2 — Competition-Scoped Import / Update Modes
+
+P24.2 adds safer spreadsheet update modes for custom and prediction-ready imports:
+
+- **Append**: adds imported fixtures without touching existing competitions.
+- **Update matching fixtures**: matches by competition + round + date + home team + away team, updates the fixture data, and preserves existing fixture IDs/tips.
+- **Replace imported competition only**: removes and replaces only the competition or competitions found in the uploaded file. Other competitions remain untouched.
+- **Replace entire workspace**: still available as a clearly labelled danger action.
+
+This prevents a Brazil Série B upload from wiping FIFA World Cup, tennis, or other competition data in the same workspace.

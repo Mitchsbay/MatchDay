@@ -19,8 +19,9 @@ import {
 
 export const ALL_ROUNDS = "__all_rounds__";
 
-export const STORAGE_KEY = "tipping-gates-app-p24-state-v1";
+export const STORAGE_KEY = "tipping-gates-app-p24-2-state-v1";
 export const LEGACY_STORAGE_KEYS = [
+  "tipping-gates-app-p24-state-v1",
   "tipping-gates-app-p23-state-v1",
   "tipping-gates-app-p22-state-v1",
   "tipping-gates-app-p21-state-v1",
@@ -32,8 +33,9 @@ export const LEGACY_STORAGE_KEYS = [
   "tipping-gates-app-p12-state-v1",
   "tipping-gates-app-p11-state-v1",
 ];
-export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p24-cloud-workspace-id";
+export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p24-2-cloud-workspace-id";
 export const LEGACY_CLOUD_WORKSPACE_ID_KEYS = [
+  "tipping-gates-app-p24-cloud-workspace-id",
   "tipping-gates-app-p23-cloud-workspace-id",
   "tipping-gates-app-p22-cloud-workspace-id",
   "tipping-gates-app-p21-cloud-workspace-id",
@@ -146,32 +148,114 @@ export function createBlankFixture(round: string, competition = "New Competition
   };
 }
 
+export type FixtureBatchMode = "append" | "replace" | "replaceCompetition" | "update";
+
 export type FixtureBatchApplyResult = {
   fixtures: Fixture[];
   tips: UserTip[];
   orphanedTipsCount: number;
+  replacedCompetitionCount: number;
+  updatedFixtureCount: number;
+  addedFixtureCount: number;
+  preservedFixtureCount: number;
 };
 
-// Shared by every fixture-batch entry point (CSV import, round-robin generator,
-// live fixture fetch): "append" just prepends, "replace" swaps in the new set
-// and drops any tips that pointed at fixtures which no longer exist, rather
-// than leaving them silently orphaned.
+function fixtureMatchKey(fixture: Fixture): string {
+  return [
+    fixture.competition.trim().toLowerCase(),
+    normaliseRound(fixture.round).trim().toLowerCase(),
+    fixture.date.trim().toLowerCase(),
+    fixture.homeTeam.trim().toLowerCase(),
+    fixture.awayTeam.trim().toLowerCase(),
+  ].join("|");
+}
+
+function getCompetitionScope(newFixtures: Fixture[], requestedScope?: string[]): Set<string> {
+  const source = requestedScope?.length ? requestedScope : newFixtures.map((fixture) => fixture.competition);
+  return new Set(source.map((competition) => competition.trim().toLowerCase()).filter(Boolean));
+}
+
+function filterTipsForFixtures(tips: UserTip[], fixtures: Fixture[]) {
+  const survivingIds = new Set(fixtures.map((fixture) => fixture.id));
+  const keptTips = tips.filter((tip) => survivingIds.has(tip.fixtureId));
+  return { keptTips, orphanedTipsCount: tips.length - keptTips.length };
+}
+
+// Shared by every fixture-batch entry point (CSV import, custom competition import,
+// round-robin generator, live fixture fetch).
+// - append: prepends imported fixtures and leaves existing workspace fixtures/tips alone.
+// - replace: swaps the entire fixture workspace and drops tips whose fixtures disappear.
+// - replaceCompetition: replaces only competitions present in the import/scope.
+// - update: updates matching fixtures in place, preserving existing IDs/tips, and adds new fixtures.
 export function applyFixtureBatch(
   newFixtures: Fixture[],
   currentFixtures: Fixture[],
   currentTips: UserTip[],
-  mode: "append" | "replace"
+  mode: FixtureBatchMode,
+  scopeCompetitions?: string[]
 ): FixtureBatchApplyResult {
+  const baseResult = {
+    replacedCompetitionCount: 0,
+    updatedFixtureCount: 0,
+    addedFixtureCount: newFixtures.length,
+    preservedFixtureCount: currentFixtures.length,
+  };
+
   if (mode === "append") {
-    return { fixtures: [...newFixtures, ...currentFixtures], tips: currentTips, orphanedTipsCount: 0 };
+    return { fixtures: [...newFixtures, ...currentFixtures], tips: currentTips, orphanedTipsCount: 0, ...baseResult };
   }
 
-  const survivingIds = new Set(newFixtures.map((fixture) => fixture.id));
-  const keptTips = currentTips.filter((tip) => survivingIds.has(tip.fixtureId));
+  if (mode === "update") {
+    const currentByKey = new Map(currentFixtures.map((fixture) => [fixtureMatchKey(fixture), fixture]));
+    const updatedIds = new Set<string>();
+    const updatedFixtures = newFixtures.map((fixture) => {
+      const existing = currentByKey.get(fixtureMatchKey(fixture));
+      if (!existing) return fixture;
+      updatedIds.add(existing.id);
+      return { ...fixture, id: existing.id };
+    });
+    const importedKeys = new Set(newFixtures.map(fixtureMatchKey));
+    const preservedFixtures = currentFixtures.filter((fixture) => !importedKeys.has(fixtureMatchKey(fixture)));
+    const finalFixtures = [...updatedFixtures, ...preservedFixtures];
+    const { keptTips, orphanedTipsCount } = filterTipsForFixtures(currentTips, finalFixtures);
+    return {
+      fixtures: finalFixtures,
+      tips: keptTips,
+      orphanedTipsCount,
+      replacedCompetitionCount: 0,
+      updatedFixtureCount: updatedIds.size,
+      addedFixtureCount: updatedFixtures.length - updatedIds.size,
+      preservedFixtureCount: preservedFixtures.length,
+    };
+  }
+
+  if (mode === "replaceCompetition") {
+    const competitionScope = getCompetitionScope(newFixtures, scopeCompetitions);
+    const preservedFixtures = currentFixtures.filter(
+      (fixture) => !competitionScope.has(fixture.competition.trim().toLowerCase()),
+    );
+    const finalFixtures = [...newFixtures, ...preservedFixtures];
+    const { keptTips, orphanedTipsCount } = filterTipsForFixtures(currentTips, finalFixtures);
+    return {
+      fixtures: finalFixtures,
+      tips: keptTips,
+      orphanedTipsCount,
+      replacedCompetitionCount: competitionScope.size,
+      updatedFixtureCount: 0,
+      addedFixtureCount: newFixtures.length,
+      preservedFixtureCount: preservedFixtures.length,
+    };
+  }
+
+  const { keptTips, orphanedTipsCount } = filterTipsForFixtures(currentTips, newFixtures);
   return {
     fixtures: newFixtures,
     tips: keptTips,
-    orphanedTipsCount: currentTips.length - keptTips.length,
+    orphanedTipsCount,
+    replacedCompetitionCount: 0,
+    updatedFixtureCount: 0,
+    addedFixtureCount: newFixtures.length,
+    preservedFixtureCount: 0,
   };
 }
 

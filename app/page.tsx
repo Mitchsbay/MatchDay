@@ -50,6 +50,7 @@ import {
   getActualOutcomeFromScore,
   getTipFor,
   normaliseRound,
+  type FixtureBatchMode,
 } from "../lib/workspace";
 import { exportFixturesToCsv, importFixturesFromCsv } from "../lib/csvWorkspace";
 import { exportRawCompetitionTemplateCsv, importCustomCompetitionFromCsv } from "../lib/customCompetitionImport";
@@ -400,7 +401,22 @@ export default function Home() {
     setCsvMessage(`Exported ${fixtures.length} fixtures to CSV.`);
   }
 
-  function importFixturesCsv(csv: string, mode: "append" | "replace") {
+
+  function describeBatchApply(applied: ReturnType<typeof applyFixtureBatch>) {
+    const parts: string[] = [];
+    if (applied.replacedCompetitionCount > 0) {
+      parts.push(`Replaced ${applied.replacedCompetitionCount} imported competition${applied.replacedCompetitionCount === 1 ? "" : "s"} only; ${applied.preservedFixtureCount} fixture${applied.preservedFixtureCount === 1 ? "" : "s"} from other competitions stayed in the workspace.`);
+    }
+    if (applied.updatedFixtureCount > 0 || applied.addedFixtureCount > 0) {
+      parts.push(`Updated ${applied.updatedFixtureCount} matching fixture${applied.updatedFixtureCount === 1 ? "" : "s"} and added ${applied.addedFixtureCount} new fixture${applied.addedFixtureCount === 1 ? "" : "s"}.`);
+    }
+    if (applied.orphanedTipsCount > 0) {
+      parts.push(`Removed ${applied.orphanedTipsCount} tip${applied.orphanedTipsCount === 1 ? "" : "s"} that pointed at fixtures no longer in the workspace.`);
+    }
+    return parts.length ? ` ${parts.join(" ")}` : "";
+  }
+
+  function importFixturesCsv(csv: string, mode: FixtureBatchMode) {
     const importResult = importFixturesFromCsv(csv);
     if (importResult.fixtures.length === 0) {
       setCsvMessage(importResult.warnings.join(" ") || "CSV import failed: no valid fixtures found.");
@@ -413,11 +429,9 @@ export default function Home() {
     setActiveFixtureId(applied.fixtures[0].id);
     setSelectedRound(normaliseRound(applied.fixtures[0].round));
     setCsvMessage(
-      `Imported ${importResult.fixtures.length} fixtures from CSV using ${mode} mode.${
-        applied.orphanedTipsCount > 0
-          ? ` Removed ${applied.orphanedTipsCount} tip${applied.orphanedTipsCount === 1 ? "" : "s"} that pointed at fixtures no longer in the workspace.`
-          : ""
-      }${importResult.warnings.length ? ` Warnings: ${importResult.warnings.join(" ")}` : ""}`,
+      `Imported ${importResult.fixtures.length} fixtures from CSV/XLSX using ${mode} mode.${describeBatchApply(applied)}${
+        importResult.warnings.length ? ` Warnings: ${importResult.warnings.join(" ")}` : ""
+      }`,
     );
   }
 
@@ -433,14 +447,14 @@ export default function Home() {
     setCustomCompetitionMessage("Exported raw competition results/fixtures template.");
   }
 
-  function importRawCompetition(csv: string, mode: "append" | "replace") {
+  function importRawCompetition(csv: string, mode: FixtureBatchMode) {
     const importResult = importCustomCompetitionFromCsv(csv);
     if (importResult.fixtures.length === 0) {
       setCustomCompetitionMessage(importResult.warnings.join(" ") || "Raw competition import failed: no valid rows found.");
       return;
     }
 
-    const applied = applyFixtureBatch(importResult.fixtures, fixtures, userTips, mode);
+    const applied = applyFixtureBatch(importResult.fixtures, fixtures, userTips, mode, importResult.competitions);
     setFixtures(applied.fixtures);
     setUserTips(applied.tips);
     setActiveFixtureId(applied.fixtures[0].id);
@@ -448,7 +462,7 @@ export default function Home() {
     setCustomCompetitionMessage(
       `Imported ${importResult.fixtures.length} custom competition fixture${importResult.fixtures.length === 1 ? "" : "s"} from ${importResult.competitions.join(", ") || "raw file"} using ${mode} mode. ` +
         `Processed ${importResult.finalRows} final result row${importResult.finalRows === 1 ? "" : "s"}, ${importResult.scheduledRows} scheduled row${importResult.scheduledRows === 1 ? "" : "s"}, and ${importResult.teams.length} team${importResult.teams.length === 1 ? "" : "s"}.` +
-        `${applied.orphanedTipsCount > 0 ? ` Removed ${applied.orphanedTipsCount} orphaned tip${applied.orphanedTipsCount === 1 ? "" : "s"}.` : ""}` +
+        describeBatchApply(applied) +
         `${importResult.warnings.length ? ` Warnings: ${importResult.warnings.join(" ")}` : ""}`,
     );
   }

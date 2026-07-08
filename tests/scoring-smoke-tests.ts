@@ -380,6 +380,38 @@ function runWorkspaceBatchAndLiveFixturesSmokeTests() {
   assert.equal(replaced.tips[0].fixtureId, "keeps-this-one");
   assert.equal(replaced.orphanedTipsCount, 1);
 
+  const otherCompetitionFixture = { ...createBlankFixture("Round 1", "Other League"), id: "other-league-fixture" };
+  const sameCompetitionReplacement = { ...createBlankFixture("Round 3", "Sample League"), id: "new-sample-league-fixture" };
+  const scoped = applyFixtureBatch(
+    [sameCompetitionReplacement],
+    [existingFixture, otherCompetitionFixture],
+    [
+      { fixtureId: existingFixture.id, entrantId: "e1", pick: "home" as const, confidence: 60 },
+      { fixtureId: otherCompetitionFixture.id, entrantId: "e1", pick: "away" as const, confidence: 55 },
+    ],
+    "replaceCompetition",
+  );
+  assert.equal(scoped.fixtures.length, 2, "competition replace should preserve fixtures from other competitions");
+  assert.ok(scoped.fixtures.some((fixture) => fixture.id === "other-league-fixture"));
+  assert.ok(scoped.fixtures.some((fixture) => fixture.id === "new-sample-league-fixture"));
+  assert.equal(scoped.tips.length, 1, "competition replace should only orphan tips for the replaced competition");
+  assert.equal(scoped.tips[0].fixtureId, "other-league-fixture");
+  assert.equal(scoped.orphanedTipsCount, 1);
+
+  const updateOriginal = { ...createBlankFixture("Round 4", "Update League"), id: "stable-tip-id", homeTeam: "Alpha", awayTeam: "Beta", date: "2026-08-01" };
+  const updateIncoming = { ...updateOriginal, id: "incoming-different-id", scores: { ...updateOriginal.scores, homeAdvantage: 3 } };
+  const updated = applyFixtureBatch(
+    [updateIncoming],
+    [updateOriginal, otherCompetitionFixture],
+    [{ fixtureId: "stable-tip-id", entrantId: "e1", pick: "home" as const, confidence: 70 }],
+    "update",
+  );
+  const updatedFixture = updated.fixtures.find((fixture) => fixture.id === "stable-tip-id");
+  assert.ok(updatedFixture, "update mode should preserve the existing fixture id for matching rows");
+  assert.equal(updatedFixture?.scores.homeAdvantage, 3, "update mode should apply incoming fixture data");
+  assert.equal(updated.tips.length, 1, "update mode should preserve tips for matched fixtures");
+  assert.equal(updated.updatedFixtureCount, 1);
+
   const row: LiveFixtureRow = {
     id: "12345",
     competition: "Premier League",

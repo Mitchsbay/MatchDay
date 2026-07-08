@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useState } from "react";
 import { FREE_TIER_COMPETITIONS } from "../lib/competitions";
+import type { FixtureBatchMode } from "../lib/workspace";
 
 export function WorkspacePersistencePanel(props: {
   storageMessage: string;
@@ -78,17 +79,27 @@ export function CloudSyncPanel(props: {
 export function CustomCompetitionImportPanel(props: {
   message: string;
   onExportTemplate: () => void;
-  onImportRawCompetition: (csv: string, mode: "append" | "replace") => void;
+  onImportRawCompetition: (csv: string, mode: FixtureBatchMode) => void;
 }) {
   const [isReading, setIsReading] = useState(false);
 
-  const handleFileImport = async (event: ChangeEvent<HTMLInputElement>, mode: "append" | "replace") => {
+  const handleFileImport = async (event: ChangeEvent<HTMLInputElement>, mode: FixtureBatchMode) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (mode === "replace") {
       const confirmed = window.confirm(
-        "Replace mode deletes every fixture currently in this workspace and swaps in the custom competition import instead. " +
+        "Replace entire workspace mode deletes every fixture currently in this workspace and swaps in the custom competition import instead. " +
           "Any tips submitted against removed fixtures will no longer count toward the leaderboard. Export a JSON backup first if this is a real competition. Continue?",
+      );
+      if (!confirmed) {
+        event.target.value = "";
+        return;
+      }
+    }
+    if (mode === "replaceCompetition") {
+      const confirmed = window.confirm(
+        "Replace imported competition mode removes only fixtures from the competition or competitions found in this file. " +
+          "Other competitions stay in the workspace. Tips against removed fixtures in the imported competition may stop counting if those exact fixtures are not re-imported. Continue?",
       );
       if (!confirmed) {
         event.target.value = "";
@@ -133,13 +144,21 @@ export function CustomCompetitionImportPanel(props: {
           <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "append")} disabled={isReading} />
         </label>
         <label className="secondary file-action">
-          Import raw CSV/XLSX and replace fixtures
+          Update matching fixtures
+          <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "update")} disabled={isReading} />
+        </label>
+        <label className="secondary file-action">
+          Replace imported competition only
+          <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "replaceCompetition")} disabled={isReading} />
+        </label>
+        <label className="secondary file-action danger">
+          Replace entire workspace
           <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "replace")} disabled={isReading} />
         </label>
       </div>
       <div className="note-box">{isReading ? "Reading file…" : props.message || "No custom competition import has run yet."}</div>
       <p className="section-help small-help">
-        Required raw columns: competition, round, date, home_team, away_team, home_goals, away_goals, status. Final rows build the table/form history; scheduled rows become upcoming prediction fixtures.
+        Required raw columns: competition, round, date, home_team, away_team, home_goals, away_goals, status. Use “Replace imported competition only” when updating one league so other competitions remain untouched.
       </p>
     </section>
   );
@@ -148,18 +167,28 @@ export function CustomCompetitionImportPanel(props: {
 export function FixtureCsvPanel(props: {
   csvMessage: string;
   onExportCsv: () => void;
-  onImportCsv: (csv: string, mode: "append" | "replace") => void;
+  onImportCsv: (csv: string, mode: FixtureBatchMode) => void;
 }) {
   const [isReading, setIsReading] = useState(false);
 
-  const handleFileImport = async (event: ChangeEvent<HTMLInputElement>, mode: "append" | "replace") => {
+  const handleFileImport = async (event: ChangeEvent<HTMLInputElement>, mode: FixtureBatchMode) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (mode === "replace") {
       const confirmed = window.confirm(
-        "Replace mode deletes every fixture currently in this workspace and swaps in the CSV/XLSX rows instead. " +
+        "Replace entire workspace mode deletes every fixture currently in this workspace and swaps in the CSV/XLSX rows instead. " +
           "Any tips submitted against fixtures that get removed will no longer count toward the leaderboard. " +
           "This can't be undone. Continue?"
+      );
+      if (!confirmed) {
+        event.target.value = "";
+        return;
+      }
+    }
+    if (mode === "replaceCompetition") {
+      const confirmed = window.confirm(
+        "Replace imported competition mode removes only fixtures from the competition or competitions found in this file. " +
+          "Other competitions stay in the workspace. Tips against removed fixtures in the imported competition may stop counting if those exact fixtures are not re-imported. Continue?"
       );
       if (!confirmed) {
         event.target.value = "";
@@ -202,7 +231,15 @@ export function FixtureCsvPanel(props: {
           <input type="file" accept="text/csv,.csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "append")} disabled={isReading} />
         </label>
         <label className="secondary file-action">
-          Import CSV/XLSX and replace fixtures
+          Update matching fixtures
+          <input type="file" accept="text/csv,.csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "update")} disabled={isReading} />
+        </label>
+        <label className="secondary file-action">
+          Replace imported competition only
+          <input type="file" accept="text/csv,.csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "replaceCompetition")} disabled={isReading} />
+        </label>
+        <label className="secondary file-action danger">
+          Replace entire workspace
           <input type="file" accept="text/csv,.csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "replace")} disabled={isReading} />
         </label>
       </div>
