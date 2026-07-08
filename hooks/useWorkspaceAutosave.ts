@@ -10,6 +10,7 @@ import {
   userTips as initialUserTips,
 } from "../lib/sampleData";
 import { RuleWeights, defaultRuleWeights } from "../lib/scoringEngine";
+import { DEFAULT_TEAM_ALIAS_RULES, TeamAliasRule, cloneTeamAliases, isTeamAliasRuleArray } from "../lib/teamAliases";
 import {
   ALL_ROUNDS,
   LEGACY_STORAGE_KEYS,
@@ -29,12 +30,14 @@ type WorkspaceAutosaveArgs = {
   ruleWeights: RuleWeights;
   entrants: Entrant[];
   userTips: UserTip[];
+  teamAliases: TeamAliasRule[];
   setFixtures: Dispatch<SetStateAction<Fixture[]>>;
   setActiveFixtureId: Dispatch<SetStateAction<string>>;
   setSelectedRound: Dispatch<SetStateAction<string>>;
   setRuleWeights: Dispatch<SetStateAction<RuleWeights>>;
   setEntrants: Dispatch<SetStateAction<Entrant[]>>;
   setUserTips: Dispatch<SetStateAction<UserTip[]>>;
+  setTeamAliases: Dispatch<SetStateAction<TeamAliasRule[]>>;
 };
 
 export function useWorkspaceAutosave({
@@ -44,12 +47,14 @@ export function useWorkspaceAutosave({
   ruleWeights,
   entrants,
   userTips,
+  teamAliases,
   setFixtures,
   setActiveFixtureId,
   setSelectedRound,
   setRuleWeights,
   setEntrants,
   setUserTips,
+  setTeamAliases,
 }: WorkspaceAutosaveArgs) {
   const [hasLoadedSavedState, setHasLoadedSavedState] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
@@ -89,6 +94,7 @@ export function useWorkspaceAutosave({
       setRuleWeights({ ...defaultRuleWeights, ...parsedState.ruleWeights });
       setEntrants(parsedState.entrants ? cloneEntrants(parsedState.entrants) : cloneEntrants(initialEntrants));
       setUserTips(parsedState.userTips ? cloneUserTips(parsedState.userTips) : cloneUserTips(initialUserTips));
+      setTeamAliases(isTeamAliasRuleArray(parsedState.teamAliases) ? cloneTeamAliases(parsedState.teamAliases) : cloneTeamAliases(DEFAULT_TEAM_ALIAS_RULES));
       setLastSavedAt(parsedState.savedAt);
       setStorageMessage("Saved workspace restored from this browser.");
     } catch {
@@ -96,7 +102,7 @@ export function useWorkspaceAutosave({
     } finally {
       setHasLoadedSavedState(true);
     }
-  }, [setActiveFixtureId, setEntrants, setFixtures, setRuleWeights, setSelectedRound, setUserTips]);
+  }, [setActiveFixtureId, setEntrants, setFixtures, setRuleWeights, setSelectedRound, setUserTips, setTeamAliases]);
 
   useEffect(() => {
     if (!hasLoadedSavedState) return;
@@ -108,6 +114,7 @@ export function useWorkspaceAutosave({
         ruleWeights,
         entrants,
         userTips,
+        teamAliases,
       );
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
       setLastSavedAt(nextState.savedAt);
@@ -115,7 +122,7 @@ export function useWorkspaceAutosave({
     } catch {
       setStorageMessage("Autosave failed. Export a backup before refreshing.");
     }
-  }, [fixtures, activeFixtureId, selectedRound, ruleWeights, entrants, userTips, hasLoadedSavedState]);
+  }, [fixtures, activeFixtureId, selectedRound, ruleWeights, entrants, userTips, teamAliases, hasLoadedSavedState]);
 
   function resetWorkspaceToSamples() {
     const nextFixtures = cloneFixtures(initialFixtures);
@@ -125,12 +132,13 @@ export function useWorkspaceAutosave({
     setRuleWeights({ ...defaultRuleWeights });
     setEntrants(cloneEntrants(initialEntrants));
     setUserTips(cloneUserTips(initialUserTips));
+    setTeamAliases(cloneTeamAliases(DEFAULT_TEAM_ALIAS_RULES));
     window.localStorage.removeItem(STORAGE_KEY);
     setStorageMessage("Workspace reset to sample data.");
   }
 
   function exportWorkspaceBackup() {
-    const state = createPersistedState(fixtures, activeFixtureId, selectedRound, ruleWeights, entrants, userTips);
+    const state = createPersistedState(fixtures, activeFixtureId, selectedRound, ruleWeights, entrants, userTips, teamAliases);
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -173,6 +181,7 @@ export function useWorkspaceAutosave({
       setRuleWeights({ ...defaultRuleWeights, ...parsedState.ruleWeights });
       setEntrants(parsedState.entrants ? cloneEntrants(parsedState.entrants) : cloneEntrants(initialEntrants));
       setUserTips(parsedState.userTips ? cloneUserTips(parsedState.userTips) : cloneUserTips(initialUserTips));
+      setTeamAliases(isTeamAliasRuleArray(parsedState.teamAliases) ? cloneTeamAliases(parsedState.teamAliases) : cloneTeamAliases(DEFAULT_TEAM_ALIAS_RULES));
       setStorageMessage("Workspace backup imported and autosaved.");
     } catch {
       setStorageMessage("Backup import failed. Check that the file is valid JSON.");

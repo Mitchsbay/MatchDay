@@ -1,45 +1,42 @@
-# MatchDay / Tipping Gates App P25
+# MatchDay / Tipping Gates App P26
 
-P25 adds an **Import Preview + Safe Weekly Update** gate on top of the P24.3 Teams + Fixtures workbook importer.
+P26 adds a **Team Alias / Name Normalisation Manager** on top of the P25 import preview gate.
 
-## P25 additions
+## P26 additions
 
-- Uploading a custom competition workbook or prediction-ready CSV/XLSX now shows a preview before applying changes.
-- Preview shows:
-  - import mode
-  - imported fixture count
-  - imported competition scope
-  - matching fixtures that will update
-  - new fixtures that will be added
-  - existing fixtures that will be preserved
-  - final workspace fixture count
-  - tips preserved
-  - tips at risk / orphaned
-  - duplicate fixture rows inside the import file
-- Destructive actions now happen after preview, not immediately on file selection.
-- Replace and replace-competition modes still require a final confirmation when applying the preview.
-- Existing P24.3 Teams + Fixtures XLSX import remains supported.
-- Existing P24.2 import modes remain supported:
-  - Append
-  - Update matching fixtures
-  - Replace imported competition only
-  - Replace entire workspace
+- New Team Alias / Name Normalisation panel under **Data & Import**.
+- Alias rules are applied to custom competition imports before preview/apply.
+- Helps weekly spreadsheets match existing fixtures when names vary, for example:
+  - `Sao Paulo` → `São Paulo`
+  - `Gremio` → `Grêmio`
+  - `Vitoria` → `Vitória`
+  - `Atletico MG` → `Atlético MG`
+- Alias rules can be scoped to one competition or applied globally.
+- Alias rules are saved in browser autosave, JSON backups and Supabase cloud workspace payloads.
+- The import preview now includes alias-applied warnings so you can see when names were normalised before applying.
+- Workspace can be normalised manually with **Apply aliases to current workspace**.
+- The panel also warns when obvious same-team spelling variants are already present in the workspace.
+
+## Still included from P25
+
+- Import preview before applying custom competition or prediction-ready imports.
+- Append / update matching fixtures / replace imported competition only / replace entire workspace.
+- Tip-risk and duplicate-row preview.
+- Teams + Fixtures XLSX workbook import.
+- Hardened lockfile guard.
 
 ## Recommended weekly workflow
 
-For weekly league updates, use:
-
 ```txt
-Custom Competition Builder
+Data & Import
+→ Check Team Alias rules
 → Upload Teams + Fixtures workbook
 → Update matching fixtures
-→ Review preview
+→ Review import preview and alias changes
 → Apply this import
 ```
 
-Use **Replace imported competition only** only when you intentionally want to refresh that league's fixtures without touching other competitions.
-
-Use **Replace entire workspace** only after exporting a JSON backup.
+Use **Update matching fixtures** for normal weekly updates so fixture IDs and submitted tips are preserved.
 
 ## Verification
 
@@ -49,4 +46,4 @@ Run:
 npm run verify
 ```
 
-This runs the public-registry lockfile guard, TypeScript, smoke tests, and the production build.
+This runs the public-registry lockfile guard, TypeScript typecheck, smoke tests and production build.

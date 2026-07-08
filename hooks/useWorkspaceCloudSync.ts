@@ -10,6 +10,7 @@ import {
   userTips as initialUserTips,
 } from "../lib/sampleData";
 import { RuleWeights, defaultRuleWeights } from "../lib/scoringEngine";
+import { DEFAULT_TEAM_ALIAS_RULES, TeamAliasRule, cloneTeamAliases, isTeamAliasRuleArray } from "../lib/teamAliases";
 import {
   ALL_ROUNDS,
   CLOUD_WORKSPACE_ID_KEY,
@@ -32,12 +33,14 @@ type WorkspaceCloudSyncArgs = {
   ruleWeights: RuleWeights;
   entrants: Entrant[];
   userTips: UserTip[];
+  teamAliases: TeamAliasRule[];
   setFixtures: Dispatch<SetStateAction<Fixture[]>>;
   setActiveFixtureId: Dispatch<SetStateAction<string>>;
   setSelectedRound: Dispatch<SetStateAction<string>>;
   setRuleWeights: Dispatch<SetStateAction<RuleWeights>>;
   setEntrants: Dispatch<SetStateAction<Entrant[]>>;
   setUserTips: Dispatch<SetStateAction<UserTip[]>>;
+  setTeamAliases: Dispatch<SetStateAction<TeamAliasRule[]>>;
   setLastSavedAt: Dispatch<SetStateAction<string | null>>;
 };
 
@@ -51,12 +54,14 @@ export function useWorkspaceCloudSync({
   ruleWeights,
   entrants,
   userTips,
+  teamAliases,
   setFixtures,
   setActiveFixtureId,
   setSelectedRound,
   setRuleWeights,
   setEntrants,
   setUserTips,
+  setTeamAliases,
   setLastSavedAt,
 }: WorkspaceCloudSyncArgs) {
   const [cloudWorkspaceId, setCloudWorkspaceId] = useState("");
@@ -126,7 +131,7 @@ export function useWorkspaceCloudSync({
     setIsCloudBusy(true);
     try {
       const now = new Date().toISOString();
-      const state = createPersistedState(fixtures, activeFixtureId, selectedRound, ruleWeights, entrants, userTips);
+      const state = createPersistedState(fixtures, activeFixtureId, selectedRound, ruleWeights, entrants, userTips, teamAliases);
       const { error } = await supabase.from("matchday_workspaces").upsert(
         {
           workspace_id: workspaceId,
@@ -204,6 +209,7 @@ export function useWorkspaceCloudSync({
       setRuleWeights({ ...defaultRuleWeights, ...cloudState.ruleWeights });
       setEntrants(cloudState.entrants ? cloneEntrants(cloudState.entrants) : cloneEntrants(initialEntrants));
       setUserTips(cloudState.userTips ? cloneUserTips(cloudState.userTips) : cloneUserTips(initialUserTips));
+      setTeamAliases(isTeamAliasRuleArray(cloudState.teamAliases) ? cloneTeamAliases(cloudState.teamAliases) : cloneTeamAliases(DEFAULT_TEAM_ALIAS_RULES));
       setLastSavedAt(cloudState.savedAt);
       setCloudMessage("Cloud workspace loaded and will now autosave locally.");
     } catch {

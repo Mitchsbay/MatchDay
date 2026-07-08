@@ -33,7 +33,7 @@ import { useWorkspaceAutosave } from "../hooks/useWorkspaceAutosave";
 import { useWorkspaceCloudSync } from "../hooks/useWorkspaceCloudSync";
 import { FixtureList } from "../components/FixtureList";
 import { RoundManagement } from "../components/RoundManagement";
-import { WorkspacePersistencePanel, CloudSyncPanel, CustomCompetitionImportPanel, FixtureCsvPanel, FixtureAutomationPanel, LiveFixturesPanel, LiveFixtureMaintenancePanel, type LiveFixtureAdminStatus } from "../components/WorkspacePanels";
+import { WorkspacePersistencePanel, CloudSyncPanel, CustomCompetitionImportPanel, FixtureCsvPanel, FixtureAutomationPanel, LiveFixturesPanel, LiveFixtureMaintenancePanel, TeamAliasManagerPanel, type LiveFixtureAdminStatus } from "../components/WorkspacePanels";
 import { AccuracyDashboard, EvidenceReadinessPanel, LeaderboardPanel, RuleLearningPanel, RuleWeightTuningPanel } from "../components/DashboardPanels";
 import { PredictionSummaryPanel, FixtureDetailsPanel, EntrantsPicksPanel, ResultInputsPanel } from "../components/FixturePanels";
 import { QuickPredictionPanel } from "../components/QuickPredictionPanel";
@@ -63,6 +63,7 @@ import {
   forgetRememberedAdminSecret,
 } from "../lib/adminSecretStorage";
 import { auditFixtureEvidence, summariseEvidenceAudits } from "../lib/evidenceAudit";
+import { DEFAULT_TEAM_ALIAS_RULES, TeamAliasRule, applyTeamAliasesToFixtures, cloneTeamAliases, detectTeamNameIssues } from "../lib/teamAliases";
 
 export default function Home() {
   type WorkspaceTab = "tip" | "evidence" | "data" | "analytics" | "competition" | "tennis";
@@ -73,6 +74,7 @@ export default function Home() {
   const [ruleWeights, setRuleWeights] = useState<RuleWeights>(() => ({ ...defaultRuleWeights }));
   const [entrants, setEntrants] = useState<Entrant[]>(() => cloneEntrants(initialEntrants));
   const [userTips, setUserTips] = useState<UserTip[]>(() => cloneUserTips(initialUserTips));
+  const [teamAliases, setTeamAliases] = useState<TeamAliasRule[]>(() => cloneTeamAliases(DEFAULT_TEAM_ALIAS_RULES));
   const [csvMessage, setCsvMessage] = useState("CSV import/export has not run yet.");
   const [customCompetitionMessage, setCustomCompetitionMessage] = useState("Custom competition import has not run yet.");
   const [automationMessage, setAutomationMessage] = useState("Fixture automation has not run yet.");
@@ -134,12 +136,14 @@ export default function Home() {
     ruleWeights,
     entrants,
     userTips,
+    teamAliases,
     setFixtures,
     setActiveFixtureId,
     setSelectedRound,
     setRuleWeights,
     setEntrants,
     setUserTips,
+    setTeamAliases,
   });
 
   const {
@@ -161,12 +165,14 @@ export default function Home() {
     ruleWeights,
     entrants,
     userTips,
+    teamAliases,
     setFixtures,
     setActiveFixtureId,
     setSelectedRound,
     setRuleWeights,
     setEntrants,
     setUserTips,
+    setTeamAliases,
     setLastSavedAt,
   });
 
@@ -245,6 +251,8 @@ export default function Home() {
     () => auditFixtureEvidence(activeFixture),
     [activeFixture],
   );
+
+  const teamNameIssues = useMemo(() => detectTeamNameIssues(fixtures), [fixtures]);
 
   const leaderboard = useMemo(() => {
     return entrants
@@ -504,8 +512,21 @@ export default function Home() {
     );
   }
 
+  function applyAliasesToImportResult(importResult: ReturnType<typeof importCustomCompetitionFromCsv>) {
+    const aliasResult = applyTeamAliasesToFixtures(importResult.fixtures, teamAliases);
+    return {
+      ...importResult,
+      fixtures: aliasResult.fixtures,
+      warnings: [
+        ...importResult.warnings,
+        ...aliasResult.changes.map((change) => `Team alias applied: ${change}.`),
+      ],
+      teams: Array.from(new Set(aliasResult.fixtures.flatMap((fixture) => [fixture.homeTeam, fixture.awayTeam]))).sort(),
+    };
+  }
+
   function previewRawCompetition(csv: string, mode: FixtureBatchMode) {
-    const importResult = importCustomCompetitionFromCsv(csv);
+    const importResult = applyAliasesToImportResult(importCustomCompetitionFromCsv(csv));
     if (importResult.fixtures.length === 0) {
       throw new Error(importResult.warnings.join(" ") || "Raw custom competition import failed: no valid rows found.");
     }
@@ -522,7 +543,7 @@ export default function Home() {
   }
 
   function previewTeamsFixturesWorkbook(teamsCsv: string, fixturesCsv: string, mode: FixtureBatchMode) {
-    const importResult = importCustomCompetitionFromWorkbookSheets(teamsCsv, fixturesCsv);
+    const importResult = applyAliasesToImportResult(importCustomCompetitionFromWorkbookSheets(teamsCsv, fixturesCsv));
     if (importResult.fixtures.length === 0) {
       throw new Error(importResult.warnings.join(" ") || "Teams + Fixtures workbook import failed: no valid fixtures found.");
     }
@@ -539,14 +560,47 @@ export default function Home() {
   }
 
   function importRawCompetition(csv: string, mode: FixtureBatchMode) {
-    applyCustomCompetitionImportResult(importCustomCompetitionFromCsv(csv), mode, "raw file");
+    applyCustomCompetitionImportResult(applyAliasesToImportResult(importCustomCompetitionFromCsv(csv)), mode, "raw file");
   }
 
   function importTeamsFixturesWorkbook(teamsCsv: string, fixturesCsv: string, mode: FixtureBatchMode) {
     applyCustomCompetitionImportResult(
-      importCustomCompetitionFromWorkbookSheets(teamsCsv, fixturesCsv),
+      applyAliasesToImportResult(importCustomCompetitionFromWorkbookSheets(teamsCsv, fixturesCsv)),
       mode,
       "Teams + Fixtures workbook",
+    );
+  }
+
+  function addTeamAliasRule(rule: Omit<TeamAliasRule, "id">) {
+    const alias = rule.alias.trim();
+    const canonical = rule.canonical.trim();
+    if (!alias || !canonical) return;
+    setTeamAliases((current) => [
+      ...current,
+      {
+        id: `alias-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        alias,
+        canonical,
+        competition: rule.competition?.trim() || undefined,
+      },
+    ]);
+  }
+
+  function removeTeamAliasRule(id: string) {
+    setTeamAliases((current) => current.filter((rule) => rule.id !== id));
+  }
+
+  function resetTeamAliasRules() {
+    setTeamAliases(cloneTeamAliases(DEFAULT_TEAM_ALIAS_RULES));
+  }
+
+  function applyAliasesToWorkspaceFixtures() {
+    const aliasResult = applyTeamAliasesToFixtures(fixtures, teamAliases);
+    setFixtures(aliasResult.fixtures);
+    setCustomCompetitionMessage(
+      aliasResult.changes.length
+        ? `Applied ${aliasResult.changes.length} team alias change${aliasResult.changes.length === 1 ? "" : "s"} to workspace fixtures: ${aliasResult.changes.join("; ")}.`
+        : "No workspace fixture names needed alias changes.",
     );
   }
 
@@ -816,10 +870,10 @@ export default function Home() {
     <main className="container">
       <section className="header">
         <div>
-          <div className="eyebrow">Tipping Gates App · P25</div>
+          <div className="eyebrow">Tipping Gates App · P26</div>
           <h1>Evidence-based tipping gates with evidence readiness audits.</h1>
           <p className="lead">
-            P25 adds an import preview gate so weekly spreadsheet updates can be reviewed before they touch the workspace.
+            P26 adds a team alias / name normalisation manager so weekly imports can safely handle Sao Paulo vs São Paulo, Gremio vs Grêmio and similar naming differences.
           </p>
         </div>
         <button className="primary" onClick={addBlankFixture}>Add Fixture</button>
@@ -955,6 +1009,14 @@ export default function Home() {
                 onCheckStatus={() => runLiveFixtureAdminAction("status")}
                 onRefreshNow={() => runLiveFixtureAdminAction("refresh")}
                 onCleanupOldFixtures={() => runLiveFixtureAdminAction("cleanup")}
+              />
+              <TeamAliasManagerPanel
+                aliases={teamAliases}
+                detectedIssues={teamNameIssues}
+                onAddAlias={addTeamAliasRule}
+                onRemoveAlias={removeTeamAliasRule}
+                onResetDefaults={resetTeamAliasRules}
+                onApplyToWorkspace={applyAliasesToWorkspaceFixtures}
               />
               <CustomCompetitionImportPanel
                 message={customCompetitionMessage}

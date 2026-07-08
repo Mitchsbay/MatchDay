@@ -4,6 +4,7 @@ import {
   TipPick,
   UserTip,
 } from "./sampleData";
+import { cloneTeamAliases, TeamAliasRule } from "./teamAliases";
 import {
   MatchResultInput,
   RuleWeights,
@@ -19,8 +20,9 @@ import {
 
 export const ALL_ROUNDS = "__all_rounds__";
 
-export const STORAGE_KEY = "tipping-gates-app-p25-state-v1";
+export const STORAGE_KEY = "tipping-gates-app-p26-state-v1";
 export const LEGACY_STORAGE_KEYS = [
+  "tipping-gates-app-p25-state-v1",
   "tipping-gates-app-p24-3-state-v1",
   "tipping-gates-app-p24-2-state-v1",
   "tipping-gates-app-p24-state-v1",
@@ -35,8 +37,9 @@ export const LEGACY_STORAGE_KEYS = [
   "tipping-gates-app-p12-state-v1",
   "tipping-gates-app-p11-state-v1",
 ];
-export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p25-cloud-workspace-id";
+export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p26-cloud-workspace-id";
 export const LEGACY_CLOUD_WORKSPACE_ID_KEYS = [
+  "tipping-gates-app-p25-cloud-workspace-id",
   "tipping-gates-app-p24-3-cloud-workspace-id",
   "tipping-gates-app-p24-2-cloud-workspace-id",
   "tipping-gates-app-p24-cloud-workspace-id",
@@ -61,6 +64,7 @@ export type PersistedAppState = {
   ruleWeights: RuleWeights;
   entrants?: Entrant[];
   userTips?: UserTip[];
+  teamAliases?: TeamAliasRule[];
 };
 
 export function normaliseRound(round: string): string {
@@ -116,9 +120,10 @@ export function createPersistedState(
   ruleWeights: RuleWeights,
   entrants: Entrant[],
   userTips: UserTip[],
+  teamAliases: TeamAliasRule[] = [],
 ): PersistedAppState {
   return {
-    version: "0.25.0",
+    version: "0.26.0",
     savedAt: new Date().toISOString(),
     fixtures: cloneFixtures(fixtures),
     activeFixtureId,
@@ -126,6 +131,7 @@ export function createPersistedState(
     ruleWeights: { ...ruleWeights },
     entrants: cloneEntrants(entrants),
     userTips: cloneUserTips(userTips),
+    teamAliases: cloneTeamAliases(teamAliases),
   };
 }
 

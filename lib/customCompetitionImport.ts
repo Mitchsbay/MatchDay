@@ -465,7 +465,9 @@ function recordToTeamSheetRecord(record: RawRecord, rowNumber: number): TeamShee
 }
 
 function teamKey(competition: string, season: string, team: string): string {
-  return [competition, season, team].map((value) => value.trim().toLowerCase()).join("|");
+  return [competition, season, team]
+    .map((value) => value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim())
+    .join("|");
 }
 
 function fallbackTeamRecord(competition: string, season: string, team: string, rowNumber: number): TeamSheetRecord {

@@ -48,6 +48,12 @@ import {
 } from "../lib/tennisScoringEngine";
 import { formatDateDDMMYYYY, mostRecentMonday, convertMatchStatsToServeStats, extractSurfaceWinRate } from "../lib/tennisDataClient";
 import {
+  applyTeamAliasesToFixtures,
+  detectTeamNameIssues,
+  normaliseComparableName,
+  normaliseTeamNameWithAliases,
+} from "../lib/teamAliases";
+import {
   findFixtureForMatchup,
   getAvailableCompetitions,
   getAwayTeamsForMatchup,
@@ -771,6 +777,35 @@ function runImportPreviewSmokeTests() {
   assert.equal(duplicatePreview.duplicateImportCount, 1);
 }
 
+
+function runTeamAliasSmokeTests() {
+  assert.equal(normaliseComparableName("São Paulo FC"), "sao paulo");
+  assert.equal(
+    normaliseTeamNameWithAliases("Sao Paulo", "Brasileirao Serie A", [
+      { id: "test-sp", alias: "Sao Paulo", canonical: "São Paulo", competition: "Brasileirao Serie A" },
+    ]),
+    "São Paulo",
+  );
+
+  const fixture = createBlankFixture("Round 1", "Brasileirao Serie A");
+  fixture.id = "alias-fixture";
+  fixture.homeTeam = "Sao Paulo";
+  fixture.awayTeam = "Gremio";
+  const aliasResult = applyTeamAliasesToFixtures([fixture], [
+    { id: "test-sp", alias: "Sao Paulo", canonical: "São Paulo" },
+    { id: "test-gre", alias: "Gremio", canonical: "Grêmio" },
+  ]);
+  assert.equal(aliasResult.fixtures[0].homeTeam, "São Paulo");
+  assert.equal(aliasResult.fixtures[0].awayTeam, "Grêmio");
+  assert.equal(aliasResult.changes.length, 2);
+
+  const variantFixture = createBlankFixture("Round 2", "Brasileirao Serie A");
+  variantFixture.homeTeam = "São Paulo";
+  variantFixture.awayTeam = "Gremio";
+  const issues = detectTeamNameIssues([fixture, variantFixture]);
+  assert.ok(issues.some((issue) => issue.variants.includes("Sao Paulo") && issue.variants.includes("São Paulo")));
+}
+
 function runLiveFixtureMaintenanceSmokeTests() {
   const now = new Date("2026-07-08T00:00:00.000Z");
   const cutoff = getLiveFixtureStaleCutoffIso(now, 14);
@@ -806,7 +841,8 @@ runEvidenceAuditSmokeTests();
 runLiveFixtureMaintenanceSmokeTests();
 runCustomCompetitionImportSmokeTests();
 runImportPreviewSmokeTests();
+runTeamAliasSmokeTests();
 runQuickPredictionSmokeTests();
 runTennisScoringSmokeTests();
 
-console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, custom competition import, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns, import previews and tennis scoring engine.");
+console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, custom competition import, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns, import previews, team aliases and tennis scoring engine.");

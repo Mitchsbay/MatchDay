@@ -3,6 +3,7 @@
 import { ChangeEvent, useState } from "react";
 import { FREE_TIER_COMPETITIONS } from "../lib/competitions";
 import type { FixtureBatchMode, FixtureBatchPreview } from "../lib/workspace";
+import type { TeamAliasRule, TeamNameIssue } from "../lib/teamAliases";
 
 
 type ImportPreviewState = {
@@ -114,6 +115,80 @@ export function CloudSyncPanel(props: {
 }
 
 
+
+export function TeamAliasManagerPanel(props: {
+  aliases: TeamAliasRule[];
+  detectedIssues: TeamNameIssue[];
+  onAddAlias: (rule: Omit<TeamAliasRule, "id">) => void;
+  onRemoveAlias: (id: string) => void;
+  onResetDefaults: () => void;
+  onApplyToWorkspace: () => void;
+}) {
+  const [alias, setAlias] = useState("");
+  const [canonical, setCanonical] = useState("");
+  const [competition, setCompetition] = useState("");
+
+  function addRule() {
+    props.onAddAlias({ alias, canonical, competition });
+    setAlias("");
+    setCanonical("");
+    setCompetition("");
+  }
+
+  return (
+    <section className="card" style={{ marginBottom: 18 }}>
+      <h3>P26 Team Alias / Name Normalisation</h3>
+      <p className="section-help">
+        Weekly spreadsheets often use different spellings for the same team, such as Sao Paulo vs São Paulo or Gremio vs Grêmio. Alias rules are applied to custom competition imports before preview/update matching runs.
+      </p>
+      <div className="input-grid">
+        <label>
+          Alias from import
+          <input value={alias} onChange={(event) => setAlias(event.target.value)} placeholder="Sao Paulo" />
+        </label>
+        <label>
+          Canonical team name
+          <input value={canonical} onChange={(event) => setCanonical(event.target.value)} placeholder="São Paulo" />
+        </label>
+        <label>
+          Competition scope optional
+          <input value={competition} onChange={(event) => setCompetition(event.target.value)} placeholder="Brasileirão Série A" />
+        </label>
+      </div>
+      <div className="actions compact-actions">
+        <button className="primary" onClick={addRule} disabled={!alias.trim() || !canonical.trim()}>Add alias</button>
+        <button className="secondary" onClick={props.onApplyToWorkspace}>Apply aliases to current workspace</button>
+        <button className="secondary" onClick={props.onResetDefaults}>Reset default Brazil aliases</button>
+      </div>
+      <div className="learning-table">
+        <div className="learning-row header-row"><span>Alias</span><span>Canonical</span><span>Scope</span><span>Action</span></div>
+        {props.aliases.map((rule) => (
+          <div className="learning-row" key={rule.id}>
+            <span>{rule.alias}</span>
+            <span>{rule.canonical}</span>
+            <span>{rule.competition || "All competitions"}</span>
+            <span><button className="secondary compact-button" onClick={() => props.onRemoveAlias(rule.id)}>Remove</button></span>
+          </div>
+        ))}
+      </div>
+      {props.detectedIssues.length > 0 ? (
+        <div className="note-box">
+          <strong>Possible naming variants detected in the workspace:</strong>
+          <ul>
+            {props.detectedIssues.slice(0, 6).map((issue) => (
+              <li key={issue.normalisedName}>
+                {issue.variants.join(" / ")} — seen in {issue.competitions.join(", ")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <div className="note-box">No obvious same-team spelling variants detected in the current workspace.</div>
+      )}
+    </section>
+  );
+}
+
 export function CustomCompetitionImportPanel(props: {
   message: string;
   onExportTemplate: () => void;
@@ -164,7 +239,7 @@ export function CustomCompetitionImportPanel(props: {
 
   return (
     <section className="card" style={{ marginBottom: 18 }}>
-      <h3>P25 Custom Competition Builder</h3>
+      <h3>P24/P25 Custom Competition Builder</h3>
       <p className="section-help">
         Import an unsupported league or competition from either a two-sheet Teams + Fixtures workbook or a raw results/upcoming fixtures file. A Teams + Fixtures workbook uses the Teams sheet for table evidence and the Fixtures sheet for the actual matches to create.
       </p>
