@@ -97,3 +97,17 @@ create policy "live_fixtures_public_read"
 -- app's Live Fixture Maintenance panel via the admin route. This keeps the
 -- public live_fixtures cache from growing indefinitely while preserving the
 -- user-owned matchday_workspaces table unchanged.
+
+-- ---------------------------------------------------------------------------
+-- Explicit Data API grants.
+--
+-- Supabase changed its default: as of May 30 2026, new projects no longer
+-- auto-expose newly created public-schema tables to the REST/GraphQL Data
+-- API — a Postgres GRANT is required in addition to RLS. RLS alone controls
+-- which *rows* a role sees; GRANT controls whether a role can reach the
+-- table via the API at all. Running these is harmless on older projects
+-- that still use the previous auto-expose default.
+-- ---------------------------------------------------------------------------
+
+grant select on public.live_fixtures to anon, authenticated;
+grant select, insert, update, delete on public.matchday_workspaces to authenticated;

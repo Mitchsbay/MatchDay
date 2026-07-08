@@ -67,8 +67,10 @@ export default function Home() {
   const [csvMessage, setCsvMessage] = useState("CSV import/export has not run yet.");
   const [automationMessage, setAutomationMessage] = useState("Fixture automation has not run yet.");
   const [liveFixturesMessage, setLiveFixturesMessage] = useState("Live fixtures have not been fetched yet.");
+  const [liveFixturesCompetition, setLiveFixturesCompetition] = useState("PL");
   const [isLoadingLiveFixtures, setIsLoadingLiveFixtures] = useState(false);
   const [liveFixtureAdminSecret, setLiveFixtureAdminSecret] = useState("");
+  const [liveFixtureAdminCompetition, setLiveFixtureAdminCompetition] = useState("PL");
   const [liveFixtureAdminMessage, setLiveFixtureAdminMessage] = useState("Live fixture maintenance has not run yet.");
   const [liveFixtureAdminStatus, setLiveFixtureAdminStatus] = useState<LiveFixtureAdminStatus | null>(null);
   const [isLiveFixtureAdminBusy, setIsLiveFixtureAdminBusy] = useState(false);
@@ -275,7 +277,7 @@ export default function Home() {
   async function loadLiveFixtures(mode: "append" | "replace") {
     setIsLoadingLiveFixtures(true);
     try {
-      const result = await fetchLiveFixtures(supabase);
+      const result = await fetchLiveFixtures(supabase, liveFixturesCompetition);
       if (result.fixtures.length === 0) {
         setLiveFixturesMessage(result.warnings.join(" ") || "No live fixtures were returned.");
         return;
@@ -325,7 +327,7 @@ export default function Home() {
               authorization: `Bearer ${liveFixtureAdminSecret.trim()}`,
               "content-type": "application/json",
             },
-            body: JSON.stringify({ action }),
+            body: JSON.stringify({ action, competition: liveFixtureAdminCompetition }),
           });
 
       const payload = await response.json().catch(() => ({}));
@@ -773,6 +775,8 @@ export default function Home() {
               <LiveFixturesPanel
                 liveFixturesMessage={liveFixturesMessage}
                 isLoadingLiveFixtures={isLoadingLiveFixtures}
+                competition={liveFixturesCompetition}
+                onCompetitionChange={setLiveFixturesCompetition}
                 onFetchLiveFixtures={loadLiveFixtures}
               />
               <LiveFixtureMaintenancePanel
@@ -780,7 +784,9 @@ export default function Home() {
                 adminMessage={liveFixtureAdminMessage}
                 adminStatus={liveFixtureAdminStatus}
                 isAdminBusy={isLiveFixtureAdminBusy}
+                competition={liveFixtureAdminCompetition}
                 onAdminSecretChange={setLiveFixtureAdminSecret}
+                onCompetitionChange={setLiveFixtureAdminCompetition}
                 onCheckStatus={() => runLiveFixtureAdminAction("status")}
                 onRefreshNow={() => runLiveFixtureAdminAction("refresh")}
                 onCleanupOldFixtures={() => runLiveFixtureAdminAction("cleanup")}

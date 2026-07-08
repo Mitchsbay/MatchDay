@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useState } from "react";
+import { FREE_TIER_COMPETITIONS } from "../lib/competitions";
 
 export function WorkspacePersistencePanel(props: {
   storageMessage: string;
@@ -193,6 +194,8 @@ export function FixtureAutomationPanel(props: {
 export function LiveFixturesPanel(props: {
   liveFixturesMessage: string;
   isLoadingLiveFixtures: boolean;
+  competition: string;
+  onCompetitionChange: (value: string) => void;
   onFetchLiveFixtures: (mode: "append" | "replace") => void;
 }) {
   const handleFetch = (mode: "append" | "replace") => {
@@ -211,10 +214,23 @@ export function LiveFixturesPanel(props: {
     <section className="card" style={{ marginBottom: 18 }}>
       <h3>P21 Live Fixtures (football-data.org)</h3>
       <p className="section-help">
-        Pull real upcoming Premier League fixtures, season stats and recent form from a scheduled cron job.
-        Odds, match results, missing players and manual gate scores aren&apos;t available from this source, so
-        those stay blank and editable, same as a CSV-imported or generated fixture.
+        Pull real upcoming fixtures, season stats and recent form for the selected competition from
+        the shared cache (populated by a scheduled cron job). Odds, match results, missing players
+        and manual gate scores aren&apos;t available from this source, so those stay blank and
+        editable, same as a CSV-imported or generated fixture. Note: tournaments without a normal
+        league table (e.g. World Cup knockout rounds) may return fixtures and recent form but little
+        or no season-stats data.
       </p>
+      <div className="field-row">
+        <label>
+          Competition (filters which cached rows to pull in)
+          <select value={props.competition} onChange={(event) => props.onCompetitionChange(event.target.value)}>
+            {FREE_TIER_COMPETITIONS.map((option) => (
+              <option key={option.code} value={option.code}>{option.name} ({option.code})</option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="actions">
         <button className="secondary" onClick={() => handleFetch("append")} disabled={props.isLoadingLiveFixtures}>
           {props.isLoadingLiveFixtures ? "Loading…" : "Fetch live fixtures and append"}
@@ -250,7 +266,9 @@ export function LiveFixtureMaintenancePanel(props: {
   adminMessage: string;
   adminStatus: LiveFixtureAdminStatus | null;
   isAdminBusy: boolean;
+  competition: string;
   onAdminSecretChange: (value: string) => void;
+  onCompetitionChange: (value: string) => void;
   onCheckStatus: () => void;
   onRefreshNow: () => void;
   onCleanupOldFixtures: () => void;
@@ -269,6 +287,13 @@ export function LiveFixtureMaintenancePanel(props: {
             onChange={(event) => props.onAdminSecretChange(event.target.value)}
             placeholder="CRON_SECRET"
           />
+        </label>
+        <label>Competition to refresh
+          <select value={props.competition} onChange={(event) => props.onCompetitionChange(event.target.value)}>
+            {FREE_TIER_COMPETITIONS.map((option) => (
+              <option key={option.code} value={option.code}>{option.name} ({option.code})</option>
+            ))}
+          </select>
         </label>
       </div>
       <div className="actions">
