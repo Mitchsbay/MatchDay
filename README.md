@@ -69,3 +69,13 @@ npm run typecheck
 npm run test:smoke
 npm run build
 ```
+
+
+## P24.1 — Quick Prediction Team Dropdown Fix
+
+P24.1 fixes the Quick Prediction team dropdown behaviour for imported/custom competitions.
+
+- The home-team dropdown now lists every team found in the selected competition, not only teams that appear as a home side.
+- The away-team dropdown now lists every other team in that competition, not only teams that already appear as an away opponent for the selected home team.
+- If the selected matchup is not currently present as a fixture, the existing warning still appears instead of silently selecting the wrong match.
+- Added smoke-test coverage so the away dropdown does not collapse to a single scheduled opponent again.

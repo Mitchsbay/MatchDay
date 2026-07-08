@@ -5,7 +5,7 @@ import {
   findFixtureForMatchup,
   getAvailableCompetitions,
   getAwayTeamsForMatchup,
-  getHomeTeamsForCompetition,
+  getTeamsForCompetition,
 } from "../lib/quickPrediction";
 
 function verdictTone(prediction: string): "good" | "warn" | "bad" {
@@ -26,7 +26,7 @@ export function QuickPredictionPanel(props: {
   const [awayTeam, setAwayTeam] = useState("");
 
   const homeTeams = useMemo(
-    () => getHomeTeamsForCompetition(props.fixtures, competition),
+    () => getTeamsForCompetition(props.fixtures, competition),
     [props.fixtures, competition],
   );
   const awayTeams = useMemo(

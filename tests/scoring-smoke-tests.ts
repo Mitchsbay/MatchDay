@@ -50,7 +50,7 @@ import {
   findFixtureForMatchup,
   getAvailableCompetitions,
   getAwayTeamsForMatchup,
-  getHomeTeamsForCompetition,
+  getTeamsForCompetition,
 } from "../lib/quickPrediction";
 
 function assertBetween(value: number, min: number, max: number, label: string) {
@@ -444,13 +444,17 @@ function runQuickPredictionSmokeTests() {
   const competitions = getAvailableCompetitions(fixtures);
   assert.ok(competitions.includes("Example League"));
 
-  const homeTeams = getHomeTeamsForCompetition(fixtures, "Example League");
+  const homeTeams = getTeamsForCompetition(fixtures, "Example League");
   assert.ok(homeTeams.includes("Arsenal"));
+  assert.ok(homeTeams.includes("Coventry"));
   assert.ok(homeTeams.includes("Everton"));
   assert.ok(homeTeams.includes("Brighton"));
 
   const awayTeams = getAwayTeamsForMatchup(fixtures, "Example League", "Arsenal");
-  assert.deepEqual(awayTeams, ["Coventry"]);
+  assert.ok(awayTeams.includes("Coventry"));
+  assert.ok(awayTeams.includes("Everton"));
+  assert.ok(awayTeams.includes("Brighton"));
+  assert.equal(awayTeams.includes("Arsenal"), false);
 
   const match = findFixtureForMatchup(fixtures, "Example League", "Arsenal", "Coventry");
   assert.ok(match, "should find the Arsenal vs Coventry sample fixture");
@@ -461,7 +465,7 @@ function runQuickPredictionSmokeTests() {
 
   // A competition/team combination with no fixtures at all should return an
   // empty list rather than throwing, since this drives dropdown population.
-  assert.deepEqual(getHomeTeamsForCompetition(fixtures, "Nonexistent League"), []);
+  assert.deepEqual(getTeamsForCompetition(fixtures, "Nonexistent League"), []);
 }
 
 function runTennisScoringSmokeTests() {

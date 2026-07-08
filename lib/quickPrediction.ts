@@ -14,18 +14,23 @@ export function getHomeTeamsForCompetition(fixtures: Fixture[], competition: str
   ).sort((a, b) => a.localeCompare(b));
 }
 
+export function getTeamsForCompetition(fixtures: Fixture[], competition: string): string[] {
+  return Array.from(
+    new Set(
+      fixtures
+        .filter((fixture) => fixture.competition === competition)
+        .flatMap((fixture) => [fixture.homeTeam, fixture.awayTeam])
+        .filter((team) => team.trim().length > 0),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+}
+
 export function getAwayTeamsForMatchup(
   fixtures: Fixture[],
   competition: string,
   homeTeam: string,
 ): string[] {
-  return Array.from(
-    new Set(
-      fixtures
-        .filter((fixture) => fixture.competition === competition && fixture.homeTeam === homeTeam)
-        .map((fixture) => fixture.awayTeam),
-    ),
-  ).sort((a, b) => a.localeCompare(b));
+  return getTeamsForCompetition(fixtures, competition).filter((team) => team !== homeTeam);
 }
 
 export function findFixtureForMatchup(
