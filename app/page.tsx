@@ -33,7 +33,7 @@ import { useWorkspaceAutosave } from "../hooks/useWorkspaceAutosave";
 import { useWorkspaceCloudSync } from "../hooks/useWorkspaceCloudSync";
 import { FixtureList } from "../components/FixtureList";
 import { RoundManagement } from "../components/RoundManagement";
-import { WorkspacePersistencePanel, CloudSyncPanel, FixtureCsvPanel, FixtureAutomationPanel, LiveFixturesPanel, LiveFixtureMaintenancePanel, type LiveFixtureAdminStatus } from "../components/WorkspacePanels";
+import { WorkspacePersistencePanel, CloudSyncPanel, CustomCompetitionImportPanel, FixtureCsvPanel, FixtureAutomationPanel, LiveFixturesPanel, LiveFixtureMaintenancePanel, type LiveFixtureAdminStatus } from "../components/WorkspacePanels";
 import { AccuracyDashboard, EvidenceReadinessPanel, LeaderboardPanel, RuleLearningPanel, RuleWeightTuningPanel } from "../components/DashboardPanels";
 import { PredictionSummaryPanel, FixtureDetailsPanel, EntrantsPicksPanel, ResultInputsPanel } from "../components/FixturePanels";
 import { QuickPredictionPanel } from "../components/QuickPredictionPanel";
@@ -52,6 +52,7 @@ import {
   normaliseRound,
 } from "../lib/workspace";
 import { exportFixturesToCsv, importFixturesFromCsv } from "../lib/csvWorkspace";
+import { exportRawCompetitionTemplateCsv, importCustomCompetitionFromCsv } from "../lib/customCompetitionImport";
 import { generateRoundRobinFixtures, FixtureGenerationRequest } from "../lib/fixtureAutomation";
 import { fetchLiveFixtures } from "../lib/liveFixtures";
 import {
@@ -71,6 +72,7 @@ export default function Home() {
   const [entrants, setEntrants] = useState<Entrant[]>(() => cloneEntrants(initialEntrants));
   const [userTips, setUserTips] = useState<UserTip[]>(() => cloneUserTips(initialUserTips));
   const [csvMessage, setCsvMessage] = useState("CSV import/export has not run yet.");
+  const [customCompetitionMessage, setCustomCompetitionMessage] = useState("Custom competition import has not run yet.");
   const [automationMessage, setAutomationMessage] = useState("Fixture automation has not run yet.");
   const [liveFixturesMessage, setLiveFixturesMessage] = useState("Live fixtures have not been fetched yet.");
   const [liveFixturesCompetition, setLiveFixturesCompetition] = useState("PL");
@@ -419,6 +421,38 @@ export default function Home() {
     );
   }
 
+  function exportRawCompetitionTemplate() {
+    const csv = exportRawCompetitionTemplateCsv();
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `matchday-raw-competition-template-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setCustomCompetitionMessage("Exported raw competition results/fixtures template.");
+  }
+
+  function importRawCompetition(csv: string, mode: "append" | "replace") {
+    const importResult = importCustomCompetitionFromCsv(csv);
+    if (importResult.fixtures.length === 0) {
+      setCustomCompetitionMessage(importResult.warnings.join(" ") || "Raw competition import failed: no valid rows found.");
+      return;
+    }
+
+    const applied = applyFixtureBatch(importResult.fixtures, fixtures, userTips, mode);
+    setFixtures(applied.fixtures);
+    setUserTips(applied.tips);
+    setActiveFixtureId(applied.fixtures[0].id);
+    setSelectedRound(normaliseRound(applied.fixtures[0].round));
+    setCustomCompetitionMessage(
+      `Imported ${importResult.fixtures.length} custom competition fixture${importResult.fixtures.length === 1 ? "" : "s"} from ${importResult.competitions.join(", ") || "raw file"} using ${mode} mode. ` +
+        `Processed ${importResult.finalRows} final result row${importResult.finalRows === 1 ? "" : "s"}, ${importResult.scheduledRows} scheduled row${importResult.scheduledRows === 1 ? "" : "s"}, and ${importResult.teams.length} team${importResult.teams.length === 1 ? "" : "s"}.` +
+        `${applied.orphanedTipsCount > 0 ? ` Removed ${applied.orphanedTipsCount} orphaned tip${applied.orphanedTipsCount === 1 ? "" : "s"}.` : ""}` +
+        `${importResult.warnings.length ? ` Warnings: ${importResult.warnings.join(" ")}` : ""}`,
+    );
+  }
+
   function updateSelectedRound(nextRound: string) {
     setSelectedRound(nextRound);
     const nextVisible =
@@ -685,10 +719,10 @@ export default function Home() {
     <main className="container">
       <section className="header">
         <div>
-          <div className="eyebrow">Tipping Gates App · P23</div>
+          <div className="eyebrow">Tipping Gates App · P24</div>
           <h1>Evidence-based tipping gates with evidence readiness audits.</h1>
           <p className="lead">
-            P23 adds fixture-level evidence completeness checks, source/readiness summaries and missing-input warnings so imported, generated and manual fixtures can be reviewed before tips are trusted.
+            P24 adds custom competition import from raw CSV/XLSX results and fixtures, then auto-calculates standings, form and prediction-ready evidence for unsupported leagues.
           </p>
         </div>
         <button className="primary" onClick={addBlankFixture}>Add Fixture</button>
@@ -824,6 +858,11 @@ export default function Home() {
                 onCheckStatus={() => runLiveFixtureAdminAction("status")}
                 onRefreshNow={() => runLiveFixtureAdminAction("refresh")}
                 onCleanupOldFixtures={() => runLiveFixtureAdminAction("cleanup")}
+              />
+              <CustomCompetitionImportPanel
+                message={customCompetitionMessage}
+                onExportTemplate={exportRawCompetitionTemplate}
+                onImportRawCompetition={importRawCompetition}
               />
               <FixtureCsvPanel
                 csvMessage={csvMessage}

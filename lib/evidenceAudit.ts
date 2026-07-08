@@ -243,6 +243,9 @@ export function describeFixtureSource(fixtureId: string): string {
   if (fixtureId.startsWith("csv-")) {
     return "CSV-imported fixture";
   }
+  if (fixtureId.startsWith("custom-")) {
+    return "Custom competition import";
+  }
   if (/^\d+$/.test(fixtureId)) {
     return "Live fixture cache";
   }

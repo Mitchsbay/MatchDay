@@ -1,6 +1,7 @@
 import assert from "assert/strict";
 import { fixtures } from "../lib/sampleData";
 import { exportFixturesToCsv, importFixturesFromCsv } from "../lib/csvWorkspace";
+import { exportRawCompetitionTemplateCsv, importCustomCompetitionFromCsv } from "../lib/customCompetitionImport";
 import { generateRoundRobinFixtures, parseFixtureGeneratorTeams } from "../lib/fixtureAutomation";
 import {
   applyCalculatedGaps,
@@ -644,6 +645,39 @@ function runTennisScoringSmokeTests() {
   assert.equal(noSurfaceData.surfaceGap, 0, "missing surface data for either player should stay neutral, not crash");
 }
 
+
+function runCustomCompetitionImportSmokeTests() {
+  const rawCsv = [
+    "competition,round,date,home_team,away_team,home_goals,away_goals,status",
+    "Brazil Serie A,Round 1,2026-04-01,Lions,Tigers,3,1,final",
+    "Brazil Serie A,Round 1,2026-04-01,Bears,Wolves,0,2,final",
+    "Brazil Serie A,Round 2,2026-04-08,Lions,Wolves,,,scheduled",
+  ].join("\n");
+  const imported = importCustomCompetitionFromCsv(rawCsv);
+  assert.equal(imported.fixtures.length, 3);
+  assert.equal(imported.finalRows, 2);
+  assert.equal(imported.scheduledRows, 1);
+
+  const scheduled = imported.fixtures.find((fixture) => fixture.homeTeam === "Lions" && fixture.awayTeam === "Wolves");
+  assert.ok(scheduled, "scheduled fixture should be generated");
+  assert.equal(scheduled?.competition, "Brazil Serie A");
+  assert.equal(scheduled?.homeStats.played, 1);
+  assert.equal(scheduled?.homeStats.points, 3);
+  assert.equal(scheduled?.homeStats.goalsFor, 3);
+  assert.equal(scheduled?.homeStats.goalsAgainst, 1);
+  assert.equal(scheduled?.awayStats.played, 1);
+  assert.equal(scheduled?.awayStats.points, 3);
+  assert.equal(scheduled?.awayStats.goalsFor, 2);
+  assert.equal(scheduled?.awayStats.goalsAgainst, 0);
+  assert.equal(scheduled?.homeRecentForm[0].result, "W");
+  assert.equal(scheduled?.awayRecentForm[0].result, "W");
+  assert.equal(describeFixtureSource(scheduled?.id ?? ""), "Custom competition import");
+
+  const template = exportRawCompetitionTemplateCsv();
+  assert.ok(template.includes("home_goals"));
+  assert.ok(template.includes("scheduled"));
+}
+
 function runLiveFixtureMaintenanceSmokeTests() {
   const now = new Date("2026-07-08T00:00:00.000Z");
   const cutoff = getLiveFixtureStaleCutoffIso(now, 14);
@@ -677,7 +711,8 @@ runFixtureAutomationSmokeTests();
 runWorkspaceBatchAndLiveFixturesSmokeTests();
 runEvidenceAuditSmokeTests();
 runLiveFixtureMaintenanceSmokeTests();
+runCustomCompetitionImportSmokeTests();
 runQuickPredictionSmokeTests();
 runTennisScoringSmokeTests();
 
-console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns and tennis scoring engine.");
+console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, custom competition import, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns and tennis scoring engine.");

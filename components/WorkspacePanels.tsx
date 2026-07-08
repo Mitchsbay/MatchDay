@@ -74,17 +74,90 @@ export function CloudSyncPanel(props: {
   );
 }
 
+
+export function CustomCompetitionImportPanel(props: {
+  message: string;
+  onExportTemplate: () => void;
+  onImportRawCompetition: (csv: string, mode: "append" | "replace") => void;
+}) {
+  const [isReading, setIsReading] = useState(false);
+
+  const handleFileImport = async (event: ChangeEvent<HTMLInputElement>, mode: "append" | "replace") => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (mode === "replace") {
+      const confirmed = window.confirm(
+        "Replace mode deletes every fixture currently in this workspace and swaps in the custom competition import instead. " +
+          "Any tips submitted against removed fixtures will no longer count toward the leaderboard. Export a JSON backup first if this is a real competition. Continue?",
+      );
+      if (!confirmed) {
+        event.target.value = "";
+        return;
+      }
+    }
+
+    setIsReading(true);
+    try {
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
+        const buffer = await file.arrayBuffer();
+        const XLSX = await import("xlsx");
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        if (!sheetName) throw new Error("Workbook does not contain any sheets.");
+        const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]);
+        props.onImportRawCompetition(csv, mode);
+      } else {
+        const csv = await file.text();
+        props.onImportRawCompetition(csv, mode);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown file read error.";
+      window.alert(`Custom competition import failed: ${message}`);
+    } finally {
+      event.target.value = "";
+      setIsReading(false);
+    }
+  };
+
+  return (
+    <section className="card" style={{ marginBottom: 18 }}>
+      <h3>P24 Custom Competition Builder</h3>
+      <p className="section-help">
+        Import an unsupported league or competition from raw results and upcoming fixtures. The app calculates standings, home/away splits and recent form automatically, then turns the rows into normal prediction fixtures for Quick Prediction.
+      </p>
+      <div className="actions">
+        <button className="secondary" onClick={props.onExportTemplate}>Export raw results template</button>
+        <label className="secondary file-action">
+          Import raw CSV/XLSX and append
+          <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "append")} disabled={isReading} />
+        </label>
+        <label className="secondary file-action">
+          Import raw CSV/XLSX and replace fixtures
+          <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "replace")} disabled={isReading} />
+        </label>
+      </div>
+      <div className="note-box">{isReading ? "Reading file…" : props.message || "No custom competition import has run yet."}</div>
+      <p className="section-help small-help">
+        Required raw columns: competition, round, date, home_team, away_team, home_goals, away_goals, status. Final rows build the table/form history; scheduled rows become upcoming prediction fixtures.
+      </p>
+    </section>
+  );
+}
+
 export function FixtureCsvPanel(props: {
   csvMessage: string;
   onExportCsv: () => void;
   onImportCsv: (csv: string, mode: "append" | "replace") => void;
 }) {
-  const handleFileImport = (event: ChangeEvent<HTMLInputElement>, mode: "append" | "replace") => {
+  const [isReading, setIsReading] = useState(false);
+
+  const handleFileImport = async (event: ChangeEvent<HTMLInputElement>, mode: "append" | "replace") => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (mode === "replace") {
       const confirmed = window.confirm(
-        "Replace mode deletes every fixture currently in this workspace and swaps in the CSV rows instead. " +
+        "Replace mode deletes every fixture currently in this workspace and swaps in the CSV/XLSX rows instead. " +
           "Any tips submitted against fixtures that get removed will no longer count toward the leaderboard. " +
           "This can't be undone. Continue?"
       );
@@ -93,32 +166,47 @@ export function FixtureCsvPanel(props: {
         return;
       }
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      props.onImportCsv(String(reader.result ?? ""), mode);
+
+    setIsReading(true);
+    try {
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
+        const buffer = await file.arrayBuffer();
+        const XLSX = await import("xlsx");
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        if (!sheetName) throw new Error("Workbook does not contain any sheets.");
+        props.onImportCsv(XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]), mode);
+      } else {
+        props.onImportCsv(await file.text(), mode);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown file read error.";
+      window.alert(`Fixture import failed: ${message}`);
+    } finally {
       event.target.value = "";
-    };
-    reader.readAsText(file);
+      setIsReading(false);
+    }
   };
 
   return (
     <section className="card" style={{ marginBottom: 18 }}>
-      <h3>P19 Fixture CSV Import / Export</h3>
+      <h3>P24 Prediction-Ready CSV/XLSX Import / Export</h3>
       <p className="section-help">
-        Bulk manage rounds, fixtures, team-stat evidence, recent form, market probabilities and final scores from a spreadsheet. Export first to get the supported column template.
+        Bulk manage rounds, fixtures, team-stat evidence, recent form, market probabilities and final scores from a spreadsheet. Export first to get the supported column template, or upload an XLSX file using those same headers.
       </p>
       <div className="actions">
         <button className="secondary" onClick={props.onExportCsv}>Export fixtures CSV</button>
         <label className="secondary file-action">
-          Import CSV and append
-          <input type="file" accept="text/csv,.csv" onChange={(event) => handleFileImport(event, "append")} />
+          Import CSV/XLSX and append
+          <input type="file" accept="text/csv,.csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "append")} disabled={isReading} />
         </label>
         <label className="secondary file-action">
-          Import CSV and replace fixtures
-          <input type="file" accept="text/csv,.csv" onChange={(event) => handleFileImport(event, "replace")} />
+          Import CSV/XLSX and replace fixtures
+          <input type="file" accept="text/csv,.csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "replace")} disabled={isReading} />
         </label>
       </div>
-      <div className="note-box">{props.csvMessage || "No CSV import/export action yet."}</div>
+      <div className="note-box">{isReading ? "Reading file…" : props.csvMessage || "No CSV/XLSX import/export action yet."}</div>
     </section>
   );
 }
