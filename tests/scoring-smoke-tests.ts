@@ -1,7 +1,7 @@
 import assert from "assert/strict";
 import { fixtures } from "../lib/sampleData";
 import { exportFixturesToCsv, importFixturesFromCsv } from "../lib/csvWorkspace";
-import { exportRawCompetitionTemplateCsv, importCustomCompetitionFromCsv } from "../lib/customCompetitionImport";
+import { exportRawCompetitionTemplateCsv, getCustomWorkbookTemplate, importCustomCompetitionFromCsv, importCustomCompetitionFromWorkbookSheets } from "../lib/customCompetitionImport";
 import { generateRoundRobinFixtures, parseFixtureGeneratorTeams } from "../lib/fixtureAutomation";
 import {
   applyCalculatedGaps,
@@ -712,6 +712,28 @@ function runCustomCompetitionImportSmokeTests() {
   const template = exportRawCompetitionTemplateCsv();
   assert.ok(template.includes("home_goals"));
   assert.ok(template.includes("scheduled"));
+
+  const workbook = getCustomWorkbookTemplate();
+  assert.ok(workbook.teamsHeaders.includes("team"));
+  assert.ok(workbook.fixturesHeaders.includes("home_team"));
+
+  const teamsCsv = [
+    "competition,season,team,played,points,wins,draws,losses,gf,ga,home_played,home_points,home_wins,home_draws,home_losses,home_gf,home_ga,away_played,away_points,away_wins,away_draws,away_losses,away_gf,away_ga,form,availability_risk,notes",
+    "Brazil Serie A,2026,Lions,18,36,11,3,4,30,14,9,20,6,2,1,16,6,9,16,5,1,3,14,8,W:2-1;D:1-1;L:0-1;W:3-0;W:1-0,0,",
+    "Brazil Serie A,2026,Wolves,18,28,8,4,6,22,18,9,15,4,3,2,12,8,9,13,4,1,4,10,10,L:0-1;W:2-0;D:1-1;L:1-2;W:2-1,1,",
+  ].join("\n");
+  const fixturesCsv = [
+    "competition,season,round,date,home_team,away_team,home_goals,away_goals,status,neutral_venue,odds_home_pct,odds_draw_pct,odds_away_pct,odds_source,head_to_head_edge,other_stats_edge,notes",
+    "Brazil Serie A,2026,Round 19,2026-07-12,Lions,Wolves,,,scheduled,false,45,28,27,Manual,1,0,",
+  ].join("\n");
+  const workbookImport = importCustomCompetitionFromWorkbookSheets(teamsCsv, fixturesCsv);
+  assert.equal(workbookImport.fixtures.length, 1);
+  assert.equal(workbookImport.teams.length, 2);
+  assert.equal(workbookImport.fixtures[0].homeStats.points, 36);
+  assert.equal(workbookImport.fixtures[0].awayStats.points, 28);
+  assert.equal(workbookImport.fixtures[0].homeRecentForm[0].result, "W");
+  assert.equal(workbookImport.fixtures[0].oddsMarket.homeWinProbability, 45);
+  assert.equal(workbookImport.fixtures[0].scores.headToHeadEdge, 1);
 }
 
 function runLiveFixtureMaintenanceSmokeTests() {

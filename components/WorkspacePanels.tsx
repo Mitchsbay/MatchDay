@@ -79,7 +79,9 @@ export function CloudSyncPanel(props: {
 export function CustomCompetitionImportPanel(props: {
   message: string;
   onExportTemplate: () => void;
+  onExportWorkbookTemplate: () => void;
   onImportRawCompetition: (csv: string, mode: FixtureBatchMode) => void;
+  onImportTeamsFixturesWorkbook: (teamsCsv: string, fixturesCsv: string, mode: FixtureBatchMode) => void;
 }) {
   const [isReading, setIsReading] = useState(false);
 
@@ -114,10 +116,20 @@ export function CustomCompetitionImportPanel(props: {
         const buffer = await file.arrayBuffer();
         const XLSX = await import("xlsx");
         const workbook = XLSX.read(buffer, { type: "array" });
-        const sheetName = workbook.SheetNames[0];
-        if (!sheetName) throw new Error("Workbook does not contain any sheets.");
-        const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]);
-        props.onImportRawCompetition(csv, mode);
+        const teamsSheetName = workbook.SheetNames.find((name) => name.trim().toLowerCase() === "teams");
+        const fixturesSheetName = workbook.SheetNames.find((name) => name.trim().toLowerCase() === "fixtures");
+        if (teamsSheetName && fixturesSheetName) {
+          props.onImportTeamsFixturesWorkbook(
+            XLSX.utils.sheet_to_csv(workbook.Sheets[teamsSheetName]),
+            XLSX.utils.sheet_to_csv(workbook.Sheets[fixturesSheetName]),
+            mode,
+          );
+        } else {
+          const sheetName = workbook.SheetNames[0];
+          if (!sheetName) throw new Error("Workbook does not contain any sheets.");
+          const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]);
+          props.onImportRawCompetition(csv, mode);
+        }
       } else {
         const csv = await file.text();
         props.onImportRawCompetition(csv, mode);
@@ -133,12 +145,13 @@ export function CustomCompetitionImportPanel(props: {
 
   return (
     <section className="card" style={{ marginBottom: 18 }}>
-      <h3>P24 Custom Competition Builder</h3>
+      <h3>P24.3 Custom Competition Builder</h3>
       <p className="section-help">
-        Import an unsupported league or competition from raw results and upcoming fixtures. The app calculates standings, home/away splits and recent form automatically, then turns the rows into normal prediction fixtures for Quick Prediction.
+        Import an unsupported league or competition from either a two-sheet Teams + Fixtures workbook or a raw results/upcoming fixtures file. A Teams + Fixtures workbook uses the Teams sheet for table evidence and the Fixtures sheet for the actual matches to create.
       </p>
       <div className="actions">
-        <button className="secondary" onClick={props.onExportTemplate}>Export raw results template</button>
+        <button className="secondary" onClick={props.onExportWorkbookTemplate}>Export Teams + Fixtures XLSX template</button>
+        <button className="secondary" onClick={props.onExportTemplate}>Export raw results CSV template</button>
         <label className="secondary file-action">
           Import raw CSV/XLSX and append
           <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "append")} disabled={isReading} />
@@ -158,7 +171,7 @@ export function CustomCompetitionImportPanel(props: {
       </div>
       <div className="note-box">{isReading ? "Reading file…" : props.message || "No custom competition import has run yet."}</div>
       <p className="section-help small-help">
-        Required raw columns: competition, round, date, home_team, away_team, home_goals, away_goals, status. Use “Replace imported competition only” when updating one league so other competitions remain untouched.
+        Teams + Fixtures XLSX files must have sheets named exactly “Teams” and “Fixtures”. Raw single-sheet files still use columns: competition, round, date, home_team, away_team, home_goals, away_goals, status. Use “Replace imported competition only” when updating one league so other competitions remain untouched.
       </p>
     </section>
   );

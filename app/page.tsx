@@ -53,7 +53,7 @@ import {
   type FixtureBatchMode,
 } from "../lib/workspace";
 import { exportFixturesToCsv, importFixturesFromCsv } from "../lib/csvWorkspace";
-import { exportRawCompetitionTemplateCsv, importCustomCompetitionFromCsv } from "../lib/customCompetitionImport";
+import { exportRawCompetitionTemplateCsv, getCustomWorkbookTemplate, importCustomCompetitionFromCsv, importCustomCompetitionFromWorkbookSheets } from "../lib/customCompetitionImport";
 import { generateRoundRobinFixtures, FixtureGenerationRequest } from "../lib/fixtureAutomation";
 import { fetchLiveFixtures } from "../lib/liveFixtures";
 import {
@@ -447,10 +447,23 @@ export default function Home() {
     setCustomCompetitionMessage("Exported raw competition results/fixtures template.");
   }
 
-  function importRawCompetition(csv: string, mode: FixtureBatchMode) {
-    const importResult = importCustomCompetitionFromCsv(csv);
+  async function exportCustomWorkbookTemplate() {
+    const XLSX = await import("xlsx");
+    const template = getCustomWorkbookTemplate();
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([[...template.teamsHeaders], ...template.teamsRows]), "Teams");
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([[...template.fixturesHeaders], ...template.fixturesRows]), "Fixtures");
+    XLSX.writeFile(workbook, `matchday-custom-competition-template-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    setCustomCompetitionMessage("Exported Teams + Fixtures workbook template.");
+  }
+
+  function applyCustomCompetitionImportResult(
+    importResult: ReturnType<typeof importCustomCompetitionFromCsv>,
+    mode: FixtureBatchMode,
+    sourceLabel: string,
+  ) {
     if (importResult.fixtures.length === 0) {
-      setCustomCompetitionMessage(importResult.warnings.join(" ") || "Raw competition import failed: no valid rows found.");
+      setCustomCompetitionMessage(importResult.warnings.join(" ") || `${sourceLabel} import failed: no valid rows found.`);
       return;
     }
 
@@ -460,10 +473,22 @@ export default function Home() {
     setActiveFixtureId(applied.fixtures[0].id);
     setSelectedRound(normaliseRound(applied.fixtures[0].round));
     setCustomCompetitionMessage(
-      `Imported ${importResult.fixtures.length} custom competition fixture${importResult.fixtures.length === 1 ? "" : "s"} from ${importResult.competitions.join(", ") || "raw file"} using ${mode} mode. ` +
+      `Imported ${importResult.fixtures.length} custom competition fixture${importResult.fixtures.length === 1 ? "" : "s"} from ${importResult.competitions.join(", ") || sourceLabel} using ${mode} mode. ` +
         `Processed ${importResult.finalRows} final result row${importResult.finalRows === 1 ? "" : "s"}, ${importResult.scheduledRows} scheduled row${importResult.scheduledRows === 1 ? "" : "s"}, and ${importResult.teams.length} team${importResult.teams.length === 1 ? "" : "s"}.` +
         describeBatchApply(applied) +
         `${importResult.warnings.length ? ` Warnings: ${importResult.warnings.join(" ")}` : ""}`,
+    );
+  }
+
+  function importRawCompetition(csv: string, mode: FixtureBatchMode) {
+    applyCustomCompetitionImportResult(importCustomCompetitionFromCsv(csv), mode, "raw file");
+  }
+
+  function importTeamsFixturesWorkbook(teamsCsv: string, fixturesCsv: string, mode: FixtureBatchMode) {
+    applyCustomCompetitionImportResult(
+      importCustomCompetitionFromWorkbookSheets(teamsCsv, fixturesCsv),
+      mode,
+      "Teams + Fixtures workbook",
     );
   }
 
@@ -733,10 +758,10 @@ export default function Home() {
     <main className="container">
       <section className="header">
         <div>
-          <div className="eyebrow">Tipping Gates App · P24</div>
+          <div className="eyebrow">Tipping Gates App · P24.3</div>
           <h1>Evidence-based tipping gates with evidence readiness audits.</h1>
           <p className="lead">
-            P24 adds custom competition import from raw CSV/XLSX results and fixtures, then auto-calculates standings, form and prediction-ready evidence for unsupported leagues.
+            P24.3 adds two-sheet Teams + Fixtures workbook support for manually managed custom competitions, while keeping raw results and prediction-ready imports available.
           </p>
         </div>
         <button className="primary" onClick={addBlankFixture}>Add Fixture</button>
@@ -876,7 +901,9 @@ export default function Home() {
               <CustomCompetitionImportPanel
                 message={customCompetitionMessage}
                 onExportTemplate={exportRawCompetitionTemplate}
+                onExportWorkbookTemplate={exportCustomWorkbookTemplate}
                 onImportRawCompetition={importRawCompetition}
+                onImportTeamsFixturesWorkbook={importTeamsFixturesWorkbook}
               />
               <FixtureCsvPanel
                 csvMessage={csvMessage}
