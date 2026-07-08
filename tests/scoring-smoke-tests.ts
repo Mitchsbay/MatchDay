@@ -30,6 +30,7 @@ import {
   createBlankFixture,
   createPersistedState,
   getActualOutcomeFromScore,
+  getFixtureBatchPreview,
   normaliseRound,
 } from "../lib/workspace";
 import { mapLiveFixtureRow, type LiveFixtureRow } from "../lib/liveFixtures";
@@ -40,7 +41,6 @@ import {
   calculateServeGap,
   calculateServeStrength,
   calculateSurfaceGap,
-  calculateHeadToHeadGap,
   calculateQualityFromRanking,
   runTennisPrediction,
   emptyTennisManualFactors,
@@ -680,35 +680,6 @@ function runTennisScoringSmokeTests() {
 
   const noSurfaceData = calculateSurfaceGap("Player A", "Player B", null, null, "Grass");
   assert.equal(noSurfaceData.surfaceGap, 0, "missing surface data for either player should stay neutral, not crash");
-
-  // Locked to the exact real getH2HInfo response captured (Djokovic vs an
-  // opponent, id 5992 vs 677): Hard 16-5, Clay 9-20, I.hard 4-1, Carpet 0-1,
-  // Grass 2-2 -> totals 31-29, an almost-even H2H that should round to 0.
-  const closeH2H = calculateHeadToHeadGap("Player A", "Player B", { playerAWins: 31, playerBWins: 29 });
-  assert.equal(closeH2H.headToHeadGap, 0, "an almost-even 31-29 H2H record should round to a neutral gap");
-
-  const dominantH2H = calculateHeadToHeadGap("Player A", "Player B", { playerAWins: 18, playerBWins: 2 });
-  assert.ok(dominantH2H.headToHeadGap > 0, "a lopsided H2H record should produce a clearly positive gap");
-
-  const noH2H = calculateHeadToHeadGap("Player A", "Player B", null);
-  assert.equal(noH2H.headToHeadGap, 0, "no head-to-head history should stay neutral, not crash");
-
-  // runTennisPrediction: manual head-to-head edge should override the
-  // automatic H2H gap, not add on top of it.
-  const neutralGates = { qualityGap: 0, playerAStrength: 50, playerBStrength: 50, evidence: [] };
-  const neutralForm = { formGap: 0, playerAFormScore: 50, playerBFormScore: 50, evidence: [] };
-  const strongAutoH2H = calculateHeadToHeadGap("Player A", "Player B", { playerAWins: 18, playerBWins: 2 });
-
-  const usingAutomaticH2H = runTennisPrediction(
-    "Player A", "Player B", neutralGates, neutralForm, emptyTennisManualFactors, null, null, strongAutoH2H,
-  );
-  assert.equal(usingAutomaticH2H.playerAEdge, strongAutoH2H.headToHeadGap, "with no manual override, the automatic H2H gap should drive the edge");
-
-  const overriddenH2H = runTennisPrediction(
-    "Player A", "Player B", neutralGates, neutralForm,
-    { headToHeadEdge: -5, otherFactorsEdge: 0 }, null, null, strongAutoH2H,
-  );
-  assert.equal(overriddenH2H.playerAEdge, -5, "a non-zero manual head-to-head edge should override the automatic H2H gap, not add to it");
 }
 
 
@@ -766,6 +737,40 @@ function runCustomCompetitionImportSmokeTests() {
   assert.equal(workbookImport.fixtures[0].scores.headToHeadEdge, 1);
 }
 
+function runImportPreviewSmokeTests() {
+  const current = cloneFixtures(fixtures).slice(0, 2);
+  const tips = [
+    { entrantId: "entrant-preview", fixtureId: current[0].id, pick: "home" as const, confidence: 70 },
+  ];
+  const replacement = {
+    ...current[0],
+    id: "custom-preview-updated",
+    scores: { ...current[0].scores, otherStatsEdge: current[0].scores.otherStatsEdge + 1 },
+  };
+  const newFixture = createBlankFixture("Round 99", current[0].competition);
+  newFixture.id = "custom-preview-new";
+  newFixture.competition = current[0].competition;
+  newFixture.date = "2026-12-31";
+  newFixture.homeTeam = "Preview Home";
+  newFixture.awayTeam = "Preview Away";
+
+  const updatePreview = getFixtureBatchPreview([replacement, newFixture], current, tips, "update");
+  assert.equal(updatePreview.importedFixtureCount, 2);
+  assert.equal(updatePreview.matchingFixtureCount, 1);
+  assert.equal(updatePreview.updatedFixtureCount, 1);
+  assert.equal(updatePreview.addedFixtureCount, 1);
+  assert.equal(updatePreview.orphanedTipsCount, 0);
+  assert.equal(updatePreview.finalFixtureCount, 3);
+
+  const replacePreview = getFixtureBatchPreview([newFixture], current, tips, "replaceCompetition", [newFixture.competition]);
+  assert.equal(replacePreview.replacedCompetitionCount, 1);
+  assert.equal(replacePreview.orphanedTipsCount, 1);
+  assert.ok(replacePreview.warnings.some((warning) => warning.includes("orphaned")));
+
+  const duplicatePreview = getFixtureBatchPreview([newFixture, { ...newFixture, id: "dupe" }], current, tips, "append");
+  assert.equal(duplicatePreview.duplicateImportCount, 1);
+}
+
 function runLiveFixtureMaintenanceSmokeTests() {
   const now = new Date("2026-07-08T00:00:00.000Z");
   const cutoff = getLiveFixtureStaleCutoffIso(now, 14);
@@ -800,7 +805,8 @@ runWorkspaceBatchAndLiveFixturesSmokeTests();
 runEvidenceAuditSmokeTests();
 runLiveFixtureMaintenanceSmokeTests();
 runCustomCompetitionImportSmokeTests();
+runImportPreviewSmokeTests();
 runQuickPredictionSmokeTests();
 runTennisScoringSmokeTests();
 
-console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, custom competition import, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns and tennis scoring engine.");
+console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, custom competition import, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns, import previews and tennis scoring engine.");

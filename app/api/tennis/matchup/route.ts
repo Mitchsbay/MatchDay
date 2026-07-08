@@ -3,14 +3,12 @@ import {
   fetchTennisRecentForm,
   fetchTennisServeStats,
   fetchTennisSurfaceWinRate,
-  fetchTennisHeadToHead,
 } from "../../../../lib/tennisDataClient";
 import {
   calculateQualityFromRanking,
   calculateFormFromRecentResults,
   calculateServeGap,
   calculateSurfaceGap,
-  calculateHeadToHeadGap,
   runTennisPrediction,
   emptyTennisManualFactors,
   type TennisManualFactors,
@@ -48,10 +46,9 @@ export async function POST(req: NextRequest) {
 
     // Rank/points already came from the rankings list the dropdown loaded —
     // no need to re-fetch a player profile just for that. Form, serve, and
-    // surface each need two calls; H2H needs only one (it's inherently
-    // pairwise, not per-player). Up to 7 requests per prediction when a
-    // surface is specified (~7 predictions/day), or 5 without one — still
-    // comfortably inside the 50/day free quota.
+    // surface each need their own call: up to 6 requests per prediction when
+    // a surface is specified (~8 predictions/day), or 4 without one, staying
+    // inside the 50/day free quota either way.
     const [
       playerARecentForm,
       playerBRecentForm,
@@ -59,7 +56,6 @@ export async function POST(req: NextRequest) {
       fetchedServeStatsB,
       surfaceRecordA,
       surfaceRecordB,
-      headToHeadRecord,
     ] = await Promise.all([
       fetchTennisRecentForm(tour, playerA.id),
       fetchTennisRecentForm(tour, playerB.id),
@@ -67,7 +63,6 @@ export async function POST(req: NextRequest) {
       body.serveStatsB ? Promise.resolve(null) : fetchTennisServeStats(tour, playerB.id),
       surfaceName ? fetchTennisSurfaceWinRate(tour, playerA.id, surfaceName) : Promise.resolve(null),
       surfaceName ? fetchTennisSurfaceWinRate(tour, playerB.id, surfaceName) : Promise.resolve(null),
-      fetchTennisHeadToHead(tour, playerA.id, playerB.id),
     ]);
 
     const serveStatsA = body.serveStatsA ?? fetchedServeStatsA;
@@ -79,17 +74,7 @@ export async function POST(req: NextRequest) {
     const surface = surfaceName
       ? calculateSurfaceGap(playerA.name, playerB.name, surfaceRecordA, surfaceRecordB, surfaceName)
       : null;
-    const headToHead = calculateHeadToHeadGap(playerA.name, playerB.name, headToHeadRecord);
-    const prediction = runTennisPrediction(
-      playerA.name,
-      playerB.name,
-      quality,
-      form,
-      manual,
-      serve,
-      surface,
-      headToHead,
-    );
+    const prediction = runTennisPrediction(playerA.name, playerB.name, quality, form, manual, serve, surface);
 
     return NextResponse.json({
       ok: true,
@@ -102,7 +87,6 @@ export async function POST(req: NextRequest) {
       form,
       serve,
       surface,
-      headToHead,
       prediction,
     });
   } catch (err) {

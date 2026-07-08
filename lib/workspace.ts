@@ -19,8 +19,9 @@ import {
 
 export const ALL_ROUNDS = "__all_rounds__";
 
-export const STORAGE_KEY = "tipping-gates-app-p24-3-state-v1";
+export const STORAGE_KEY = "tipping-gates-app-p25-state-v1";
 export const LEGACY_STORAGE_KEYS = [
+  "tipping-gates-app-p24-3-state-v1",
   "tipping-gates-app-p24-2-state-v1",
   "tipping-gates-app-p24-state-v1",
   "tipping-gates-app-p23-state-v1",
@@ -34,8 +35,9 @@ export const LEGACY_STORAGE_KEYS = [
   "tipping-gates-app-p12-state-v1",
   "tipping-gates-app-p11-state-v1",
 ];
-export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p24-3-cloud-workspace-id";
+export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p25-cloud-workspace-id";
 export const LEGACY_CLOUD_WORKSPACE_ID_KEYS = [
+  "tipping-gates-app-p24-3-cloud-workspace-id",
   "tipping-gates-app-p24-2-cloud-workspace-id",
   "tipping-gates-app-p24-cloud-workspace-id",
   "tipping-gates-app-p23-cloud-workspace-id",
@@ -116,7 +118,7 @@ export function createPersistedState(
   userTips: UserTip[],
 ): PersistedAppState {
   return {
-    version: "0.24.3",
+    version: "0.25.0",
     savedAt: new Date().toISOString(),
     fixtures: cloneFixtures(fixtures),
     activeFixtureId,
@@ -162,6 +164,25 @@ export type FixtureBatchApplyResult = {
   preservedFixtureCount: number;
 };
 
+export type FixtureBatchPreview = {
+  mode: FixtureBatchMode;
+  importedFixtureCount: number;
+  importedCompetitionCount: number;
+  importedCompetitions: string[];
+  duplicateImportCount: number;
+  matchingFixtureCount: number;
+  updatedFixtureCount: number;
+  addedFixtureCount: number;
+  preservedFixtureCount: number;
+  replacedCompetitionCount: number;
+  orphanedTipsCount: number;
+  tipsPreservedCount: number;
+  currentFixtureCount: number;
+  finalFixtureCount: number;
+  summaryLines: string[];
+  warnings: string[];
+};
+
 function fixtureMatchKey(fixture: Fixture): string {
   return [
     fixture.competition.trim().toLowerCase(),
@@ -181,6 +202,76 @@ function filterTipsForFixtures(tips: UserTip[], fixtures: Fixture[]) {
   const survivingIds = new Set(fixtures.map((fixture) => fixture.id));
   const keptTips = tips.filter((tip) => survivingIds.has(tip.fixtureId));
   return { keptTips, orphanedTipsCount: tips.length - keptTips.length };
+}
+
+
+export function getFixtureBatchPreview(
+  newFixtures: Fixture[],
+  currentFixtures: Fixture[],
+  currentTips: UserTip[],
+  mode: FixtureBatchMode,
+  scopeCompetitions?: string[]
+): FixtureBatchPreview {
+  const applied = applyFixtureBatch(newFixtures, currentFixtures, currentTips, mode, scopeCompetitions);
+  const importedCompetitions = Array.from(
+    getCompetitionScope(newFixtures, scopeCompetitions)
+  ).sort();
+
+  const seenKeys = new Set<string>();
+  let duplicateImportCount = 0;
+  newFixtures.forEach((fixture) => {
+    const key = fixtureMatchKey(fixture);
+    if (seenKeys.has(key)) duplicateImportCount += 1;
+    seenKeys.add(key);
+  });
+
+  const currentKeys = new Set(currentFixtures.map(fixtureMatchKey));
+  const matchingFixtureCount = newFixtures.filter((fixture) => currentKeys.has(fixtureMatchKey(fixture))).length;
+  const warnings: string[] = [];
+  if (duplicateImportCount > 0) {
+    warnings.push(`${duplicateImportCount} duplicate fixture row${duplicateImportCount === 1 ? "" : "s"} detected inside the import file.`);
+  }
+  if (mode === "replace") {
+    warnings.push("Replace entire workspace will remove every current fixture before importing this file.");
+  }
+  if (mode === "replaceCompetition") {
+    warnings.push(`Only imported competition scope will be replaced: ${importedCompetitions.join(", ") || "unknown"}.`);
+  }
+  if (applied.orphanedTipsCount > 0) {
+    warnings.push(`${applied.orphanedTipsCount} existing tip${applied.orphanedTipsCount === 1 ? "" : "s"} would be orphaned by this import mode.`);
+  }
+
+  const modeLabel: Record<FixtureBatchMode, string> = {
+    append: "Append",
+    update: "Update matching fixtures",
+    replaceCompetition: "Replace imported competition only",
+    replace: "Replace entire workspace",
+  };
+
+  return {
+    mode,
+    importedFixtureCount: newFixtures.length,
+    importedCompetitionCount: importedCompetitions.length,
+    importedCompetitions,
+    duplicateImportCount,
+    matchingFixtureCount,
+    updatedFixtureCount: applied.updatedFixtureCount,
+    addedFixtureCount: applied.addedFixtureCount,
+    preservedFixtureCount: applied.preservedFixtureCount,
+    replacedCompetitionCount: applied.replacedCompetitionCount,
+    orphanedTipsCount: applied.orphanedTipsCount,
+    tipsPreservedCount: applied.tips.length,
+    currentFixtureCount: currentFixtures.length,
+    finalFixtureCount: applied.fixtures.length,
+    warnings,
+    summaryLines: [
+      `Mode: ${modeLabel[mode]}.`,
+      `Imported ${newFixtures.length} fixture${newFixtures.length === 1 ? "" : "s"} across ${importedCompetitions.length || 0} competition${importedCompetitions.length === 1 ? "" : "s"}.`,
+      `Will update ${applied.updatedFixtureCount} matching fixture${applied.updatedFixtureCount === 1 ? "" : "s"}, add ${applied.addedFixtureCount} new fixture${applied.addedFixtureCount === 1 ? "" : "s"}, and preserve ${applied.preservedFixtureCount} existing fixture${applied.preservedFixtureCount === 1 ? "" : "s"}.`,
+      `Workspace fixture count will change from ${currentFixtures.length} to ${applied.fixtures.length}.`,
+      `Tips preserved: ${applied.tips.length}; tips at risk: ${applied.orphanedTipsCount}.`,
+    ],
+  };
 }
 
 // Shared by every fixture-batch entry point (CSV import, custom competition import,

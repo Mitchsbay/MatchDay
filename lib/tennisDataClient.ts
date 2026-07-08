@@ -8,13 +8,7 @@
 // differs per endpoint: bare array, {data: [...]}, and {data, hasNextPage}
 // all appear across three different endpoints in the same API).
 
-import type {
-  TennisFormResult,
-  TennisHeadToHeadRecord,
-  TennisPlayerSummary,
-  TennisServeStats,
-  TennisTour,
-} from "./tennisScoringEngine";
+import type { TennisFormResult, TennisPlayerSummary, TennisServeStats, TennisTour } from "./tennisScoringEngine";
 
 const BASE_URL = "https://tennis-api-atp-wta-itf.p.rapidapi.com/tennis/v2";
 const HOST = "tennis-api-atp-wta-itf.p.rapidapi.com";
@@ -234,36 +228,4 @@ export async function fetchTennisSurfaceWinRate(
   const data = await getJson<SurfaceSummaryResponse>(`/${tour}/player/surface-summary/${playerId}`);
   const currentYear = new Date().getUTCFullYear();
   return extractSurfaceWinRate(data.data, courtName, currentYear);
-}
-
-// --- True head-to-head: getH2HInfo, not getH2HVsAllOppStats -----------------
-// getH2HVsAllOppStats is misleadingly named — verified it's actually one
-// player's aggregate career stats vs. the whole field (matchesCount: 1540
-// for Djokovic, obviously his entire career total, not one rivalry).
-// getH2HInfo, which takes two separate player-id path params, is the real
-// head-to-head: win/loss split by surface between exactly these two players.
-// Career-wide, not windowed by year — true H2H samples are usually small
-// enough already that narrowing further would leave too little data.
-
-type H2HInfoResponse = {
-  data: Array<{ courtId: number; court: string; player1wins: string; player2wins: string }>;
-};
-
-export async function fetchTennisHeadToHead(
-  tour: TennisTour,
-  playerAId: number,
-  playerBId: number,
-): Promise<TennisHeadToHeadRecord> {
-  const data = await getJson<H2HInfoResponse>(`/${tour}/h2h/info/${playerAId}/${playerBId}`);
-
-  let playerAWins = 0;
-  let playerBWins = 0;
-  for (const entry of data.data) {
-    // player1wins/player2wins are strings in the real response, not numbers.
-    playerAWins += Number(entry.player1wins) || 0;
-    playerBWins += Number(entry.player2wins) || 0;
-  }
-
-  if (playerAWins + playerBWins === 0) return null;
-  return { playerAWins, playerBWins };
 }

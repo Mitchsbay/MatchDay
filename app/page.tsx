@@ -48,6 +48,7 @@ import {
   cloneUserTips,
   createBlankFixture,
   getActualOutcomeFromScore,
+  getFixtureBatchPreview,
   getTipFor,
   normaliseRound,
   type FixtureBatchMode,
@@ -416,6 +417,29 @@ export default function Home() {
     return parts.length ? ` ${parts.join(" ")}` : "";
   }
 
+  function confirmImportApply(mode: FixtureBatchMode, label: string) {
+    if (mode === "append" || mode === "update") return true;
+    const action = mode === "replace" ? "replace the entire workspace" : "replace only the imported competition scope";
+    return window.confirm(`Apply ${label}? This will ${action}. Review the preview details before continuing.`);
+  }
+
+  function previewFixturesCsv(csv: string, mode: FixtureBatchMode) {
+    const importResult = importFixturesFromCsv(csv);
+    if (importResult.fixtures.length === 0) {
+      throw new Error(importResult.warnings.join(" ") || "CSV/XLSX import failed: no valid fixtures found.");
+    }
+    return {
+      title: "Prediction-ready import preview",
+      mode,
+      preview: getFixtureBatchPreview(importResult.fixtures, fixtures, userTips, mode),
+      warnings: importResult.warnings,
+      apply: () => {
+        if (!confirmImportApply(mode, "prediction-ready import")) return;
+        importFixturesCsv(csv, mode);
+      },
+    };
+  }
+
   function importFixturesCsv(csv: string, mode: FixtureBatchMode) {
     const importResult = importFixturesFromCsv(csv);
     if (importResult.fixtures.length === 0) {
@@ -478,6 +502,40 @@ export default function Home() {
         describeBatchApply(applied) +
         `${importResult.warnings.length ? ` Warnings: ${importResult.warnings.join(" ")}` : ""}`,
     );
+  }
+
+  function previewRawCompetition(csv: string, mode: FixtureBatchMode) {
+    const importResult = importCustomCompetitionFromCsv(csv);
+    if (importResult.fixtures.length === 0) {
+      throw new Error(importResult.warnings.join(" ") || "Raw custom competition import failed: no valid rows found.");
+    }
+    return {
+      title: "Custom raw competition import preview",
+      mode,
+      preview: getFixtureBatchPreview(importResult.fixtures, fixtures, userTips, mode, importResult.competitions),
+      warnings: importResult.warnings,
+      apply: () => {
+        if (!confirmImportApply(mode, "custom competition import")) return;
+        importRawCompetition(csv, mode);
+      },
+    };
+  }
+
+  function previewTeamsFixturesWorkbook(teamsCsv: string, fixturesCsv: string, mode: FixtureBatchMode) {
+    const importResult = importCustomCompetitionFromWorkbookSheets(teamsCsv, fixturesCsv);
+    if (importResult.fixtures.length === 0) {
+      throw new Error(importResult.warnings.join(" ") || "Teams + Fixtures workbook import failed: no valid fixtures found.");
+    }
+    return {
+      title: "Teams + Fixtures workbook import preview",
+      mode,
+      preview: getFixtureBatchPreview(importResult.fixtures, fixtures, userTips, mode, importResult.competitions),
+      warnings: importResult.warnings,
+      apply: () => {
+        if (!confirmImportApply(mode, "Teams + Fixtures workbook import")) return;
+        importTeamsFixturesWorkbook(teamsCsv, fixturesCsv, mode);
+      },
+    };
   }
 
   function importRawCompetition(csv: string, mode: FixtureBatchMode) {
@@ -758,10 +816,10 @@ export default function Home() {
     <main className="container">
       <section className="header">
         <div>
-          <div className="eyebrow">Tipping Gates App · P24.3</div>
+          <div className="eyebrow">Tipping Gates App · P25</div>
           <h1>Evidence-based tipping gates with evidence readiness audits.</h1>
           <p className="lead">
-            P24.3 adds two-sheet Teams + Fixtures workbook support for manually managed custom competitions, while keeping raw results and prediction-ready imports available.
+            P25 adds an import preview gate so weekly spreadsheet updates can be reviewed before they touch the workspace.
           </p>
         </div>
         <button className="primary" onClick={addBlankFixture}>Add Fixture</button>
@@ -902,12 +960,15 @@ export default function Home() {
                 message={customCompetitionMessage}
                 onExportTemplate={exportRawCompetitionTemplate}
                 onExportWorkbookTemplate={exportCustomWorkbookTemplate}
+                onPreviewRawCompetition={previewRawCompetition}
                 onImportRawCompetition={importRawCompetition}
+                onPreviewTeamsFixturesWorkbook={previewTeamsFixturesWorkbook}
                 onImportTeamsFixturesWorkbook={importTeamsFixturesWorkbook}
               />
               <FixtureCsvPanel
                 csvMessage={csvMessage}
                 onExportCsv={exportFixturesCsv}
+                onPreviewCsv={previewFixturesCsv}
                 onImportCsv={importFixturesCsv}
               />
               <CloudSyncPanel
