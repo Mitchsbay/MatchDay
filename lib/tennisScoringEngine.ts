@@ -235,6 +235,44 @@ export function calculateSurfaceGap(
 }
 
 // --- Prediction: combine gates, no draw outcome exists -----------------------
+// --- Head-to-Head Gate: real pairwise history, not aggregate career stats ---
+// Verified against getH2HInfo (not the misleadingly-named getH2HVsAllOppStats,
+// which turned out to be one player's career totals vs. the whole field).
+// This is genuine two-player history, win/loss by surface, summed across all
+// surfaces for an overall record — small samples are typical for H2H, so
+// this isn't windowed by recency the way Surface Gate is.
+export type TennisHeadToHeadRecord = { playerAWins: number; playerBWins: number } | null;
+
+export type TennisHeadToHeadGapResult = {
+  headToHeadGap: number; // -10..+10, positive favours player A
+  evidence: string[];
+};
+
+export function calculateHeadToHeadGap(
+  playerAName: string,
+  playerBName: string,
+  record: TennisHeadToHeadRecord,
+): TennisHeadToHeadGapResult {
+  if (!record || record.playerAWins + record.playerBWins === 0) {
+    return {
+      headToHeadGap: 0,
+      evidence: ["No head-to-head history between these two players yet — H2H Gate stays neutral."],
+    };
+  }
+
+  const total = record.playerAWins + record.playerBWins;
+  const rateA = record.playerAWins / total;
+  const headToHeadGap = Math.max(-10, Math.min(10, Math.round((rateA - 0.5) * 20)));
+
+  return {
+    headToHeadGap,
+    evidence: [
+      `Head-to-head: ${playerAName} ${record.playerAWins}-${record.playerBWins} ${playerBName} (all-time, all surfaces).`,
+      `H2H gap ${headToHeadGap >= 0 ? "+" : ""}${headToHeadGap} (positive favours ${playerAName}).`,
+    ],
+  };
+}
+
 export function runTennisPrediction(
   playerAName: string,
   playerBName: string,
@@ -243,11 +281,18 @@ export function runTennisPrediction(
   manual: TennisManualFactors,
   serve: TennisServeGapResult | null = null,
   surface: TennisSurfaceGapResult | null = null,
+  headToHead: TennisHeadToHeadGapResult | null = null,
 ): TennisPredictionResult {
   const serveGap = serve?.serveGap ?? 0;
   const surfaceGap = surface?.surfaceGap ?? 0;
+  // Manual head-to-head edge now acts as an override, not an addition on top
+  // of automatic H2H — typing in a non-zero value replaces the fetched H2H
+  // gap rather than stacking with it, avoiding double-counting the exact
+  // same signal (same override pattern already used for serve stats).
+  const usingManualH2H = manual.headToHeadEdge !== 0;
+  const h2hGap = usingManualH2H ? manual.headToHeadEdge : headToHead?.headToHeadGap ?? 0;
   const playerAEdge =
-    quality.qualityGap + form.formGap + serveGap + surfaceGap + manual.headToHeadEdge + manual.otherFactorsEdge;
+    quality.qualityGap + form.formGap + serveGap + surfaceGap + h2hGap + manual.otherFactorsEdge;
 
   // Quality and form pulling in opposite directions by a wide margin is a
   // genuine reason for caution, same principle as football's Conflict Gate —
@@ -284,9 +329,9 @@ export function runTennisPrediction(
     ...form.evidence,
     ...(serve?.evidence ?? []),
     ...(surface?.evidence ?? []),
-    manual.headToHeadEdge !== 0
-      ? `Manual head-to-head edge: ${manual.headToHeadEdge >= 0 ? "+" : ""}${manual.headToHeadEdge}.`
-      : null,
+    usingManualH2H
+      ? `Manual head-to-head edge (overrides automatic H2H): ${manual.headToHeadEdge >= 0 ? "+" : ""}${manual.headToHeadEdge}.`
+      : (headToHead?.evidence ?? []).join(" "),
     manual.otherFactorsEdge !== 0
       ? `Manual other-factors edge: ${manual.otherFactorsEdge >= 0 ? "+" : ""}${manual.otherFactorsEdge}.`
       : null,

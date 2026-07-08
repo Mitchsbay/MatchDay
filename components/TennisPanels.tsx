@@ -9,6 +9,7 @@ import type {
   TennisServeGapResult,
   TennisServeStats,
   TennisSurfaceGapResult,
+  TennisHeadToHeadGapResult,
   TennisTour,
 } from "../lib/tennisScoringEngine";
 
@@ -29,6 +30,7 @@ type MatchupResponse = {
   form: TennisFormGapResult;
   serve: TennisServeGapResult;
   surface: TennisSurfaceGapResult | null;
+  headToHead: TennisHeadToHeadGapResult;
   prediction: TennisPredictionResult;
 };
 
@@ -218,7 +220,7 @@ export function TennisQuickPredictionPanel() {
       />
 
       <div className="field-row">
-        <label>Manual head-to-head edge
+        <label>Manual head-to-head edge (overrides automatic H2H — leave at 0 to use it)
           <input
             type="number"
             value={headToHeadEdge}
@@ -238,7 +240,8 @@ export function TennisQuickPredictionPanel() {
         Serve Gate: fetched automatically from career serve stats (no surface breakdown available on
         this endpoint — one number covering a player&apos;s whole career). Leave the fields below at 0
         to use the automatic numbers; fill them in only if you want to override with fresher or
-        surface-specific stats from elsewhere.
+        surface-specific stats from elsewhere. Head-to-head is also fetched automatically now — the
+        manual field further down only takes effect if you set it to something other than 0.
       </p>
       <div className="field-row">
         <label>{playerA?.name ?? "Player A"} 1st serve in %
@@ -309,6 +312,9 @@ export function TennisQuickPredictionPanel() {
             )}
             {result.surface && result.surface.surfaceGap !== 0 && (
               <> · Surface gap {result.surface.surfaceGap >= 0 ? "+" : ""}{result.surface.surfaceGap} ({result.surface.playerASurfaceWinRate ?? "—"}% vs {result.surface.playerBSurfaceWinRate ?? "—"}%)</>
+            )}
+            {result.headToHead.headToHeadGap !== 0 && (
+              <> · H2H gap {result.headToHead.headToHeadGap >= 0 ? "+" : ""}{result.headToHead.headToHeadGap}</>
             )}
           </div>
         </div>

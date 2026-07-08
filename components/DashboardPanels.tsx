@@ -3,7 +3,6 @@
 import type { Entrant } from "../lib/sampleData";
 import type { EvidenceAuditSummary, FixtureEvidenceAudit } from "../lib/evidenceAudit";
 import type { RuleWeights } from "../lib/scoringEngine";
-import type { CompetitionInsights } from "../lib/competitionInsights";
 import { ruleWeightDefinitions } from "../lib/scoringEngine";
 import { signed } from "../lib/uiFormat";
 
@@ -13,116 +12,6 @@ function auditStatusBadge(status: FixtureEvidenceAudit["status"]) {
   if (status === "ready") return <span className="badge good">Ready</span>;
   if (status === "review") return <span className="badge warn">Review</span>;
   return <span className="badge bad">Incomplete</span>;
-}
-
-function StandingsTable(props: { rows: CompetitionInsights["resultStandings"]; emptyLabel: string; showSourceCount?: boolean }) {
-  if (props.rows.length === 0) return <div className="note-box">{props.emptyLabel}</div>;
-  return (
-    <div className="table-wrap">
-      <table className="mini-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Team</th>
-            <th>P</th>
-            <th>Pts</th>
-            <th>W</th>
-            <th>D</th>
-            <th>L</th>
-            <th>GF</th>
-            <th>GA</th>
-            <th>GD</th>
-            <th>PPG</th>
-            <th>Home</th>
-            <th>Away</th>
-            {props.showSourceCount && <th>Sources</th>}
-            <th>Form</th>
-          </tr>
-        </thead>
-        <tbody>
-          {props.rows.map((row, index) => (
-            <tr key={`${row.team}-${index}`}>
-              <td>{index + 1}</td>
-              <td><strong>{row.team}</strong></td>
-              <td>{row.played}</td>
-              <td><strong>{row.points}</strong></td>
-              <td>{row.wins}</td>
-              <td>{row.draws}</td>
-              <td>{row.losses}</td>
-              <td>{row.goalsFor}</td>
-              <td>{row.goalsAgainst}</td>
-              <td>{signed(row.goalDifference)}</td>
-              <td>{row.pointsPerGame.toFixed(2)}</td>
-              <td>{row.homePlayed ? `${row.homePoints}/${row.homePlayed}` : "—"}</td>
-              <td>{row.awayPlayed ? `${row.awayPoints}/${row.awayPlayed}` : "—"}</td>
-              {props.showSourceCount && <td>{row.sourceCount ?? 0}</td>}
-              <td>{row.form || "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-export function CompetitionInsightsPanel(props: {
-  competitionNames: string[];
-  selectedCompetition: string;
-  insights: CompetitionInsights;
-  onCompetitionChange: (competition: string) => void;
-}) {
-  const { insights } = props;
-  return (
-    <section className="card" style={{ marginBottom: 18 }}>
-      <h3>P27 Results History + Standings View</h3>
-      <p className="section-help">
-        Review the imported competition before trusting predictions. The results-derived table is calculated from final fixture scores in the workspace; the imported evidence table shows the latest team-stat snapshot supplied by your Teams sheet or fixture evidence.
-      </p>
-      <label>
-        Competition
-        <select value={props.selectedCompetition} onChange={(event) => props.onCompetitionChange(event.target.value)}>
-          {props.competitionNames.map((competition) => (
-            <option key={competition} value={competition}>{competition}</option>
-          ))}
-        </select>
-      </label>
-      <div className="result-grid compact" style={{ marginTop: 12 }}>
-        <div className="metric"><div className="label">Fixtures</div><div className="value">{insights.fixtureCount}</div></div>
-        <div className="metric"><div className="label">Final results</div><div className="value">{insights.finalResultCount}</div></div>
-        <div className="metric"><div className="label">Pending</div><div className="value">{insights.pendingFixtureCount}</div></div>
-        <div className="metric"><div className="label">Teams</div><div className="value">{insights.teamCount}</div></div>
-      </div>
-      {insights.warnings.length > 0 && (
-        <div className="warning-list">
-          {insights.warnings.map((warning) => <div key={warning}>⚠ {warning}</div>)}
-        </div>
-      )}
-      <h4>Results-derived standings</h4>
-      <StandingsTable rows={insights.resultStandings} emptyLabel="No final scores have been imported for this competition yet." />
-      <h4>Imported team evidence snapshot</h4>
-      <StandingsTable rows={insights.evidenceStandings} emptyLabel="No team evidence stats are available yet. Import a Teams + Fixtures workbook or prediction-ready file with team stats." showSourceCount />
-      <h4>Recent final results</h4>
-      {insights.recentResults.length === 0 ? (
-        <div className="note-box">No final result rows found yet.</div>
-      ) : (
-        <div className="table-wrap">
-          <table className="mini-table">
-            <thead><tr><th>Date</th><th>Round</th><th>Match</th><th>Score</th></tr></thead>
-            <tbody>
-              {insights.recentResults.map((result) => (
-                <tr key={result.fixtureId}>
-                  <td>{result.date}</td>
-                  <td>{result.round}</td>
-                  <td>{result.homeTeam} vs {result.awayTeam}</td>
-                  <td><strong>{result.homeGoals}–{result.awayGoals}</strong></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
 }
 
 export function EvidenceReadinessPanel(props: { summary: EvidenceAuditSummary; selectedRoundLabel: string }) {

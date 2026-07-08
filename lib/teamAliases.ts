@@ -54,13 +54,19 @@ export function normaliseTeamNameWithAliases(
 ): string {
   const cleanName = teamName.trim();
   const comparable = normaliseComparableName(cleanName);
-  const match = aliases.find(
+  const applicable = aliases.filter(
     (rule) =>
       rule.alias.trim() &&
       rule.canonical.trim() &&
       normaliseComparableName(rule.alias) === comparable &&
       ruleAppliesToCompetition(rule, competition),
   );
+  // A competition-scoped rule is a more specific, deliberate override and
+  // should win over a global rule for the same alias, regardless of which
+  // was added first — otherwise a global default (like the five built-in
+  // Brazilian aliases) can silently block a scoped override added later.
+  const match =
+    applicable.find((rule) => rule.competition?.trim()) ?? applicable.find((rule) => !rule.competition?.trim());
   return match ? match.canonical.trim() : cleanName;
 }
 

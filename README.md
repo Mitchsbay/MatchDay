@@ -1,29 +1,29 @@
-# MatchDay / Tipping Gates App P27
+# MatchDay / Tipping Gates App P26
 
-P27 adds a **Results History + Standings View** on top of the P26 team alias / name normalisation manager.
+P26 adds a **Team Alias / Name Normalisation Manager** on top of the P25 import preview gate.
 
-## P27 additions
+## P26 additions
 
-- New **Results History + Standings View** panel under the **Competition** tab.
-- Competition selector for reviewing one imported league at a time.
-- Results-derived league table calculated from final fixture scores in the workspace.
-- Imported team evidence snapshot table using the latest team stats supplied by Teams + Fixtures workbooks, prediction-ready imports or live fixture evidence.
-- Recent final results table for the selected competition.
-- Summary cards for fixtures, final results, pending fixtures and team count.
-- Warnings when a competition has no final results or no imported team evidence stats.
+- New Team Alias / Name Normalisation panel under **Data & Import**.
+- Alias rules are applied to custom competition imports before preview/apply.
+- Helps weekly spreadsheets match existing fixtures when names vary, for example:
+  - `Sao Paulo` → `São Paulo`
+  - `Gremio` → `Grêmio`
+  - `Vitoria` → `Vitória`
+  - `Atletico MG` → `Atlético MG`
+- Alias rules can be scoped to one competition or applied globally.
+- Alias rules are saved in browser autosave, JSON backups and Supabase cloud workspace payloads.
+- The import preview now includes alias-applied warnings so you can see when names were normalised before applying.
+- Workspace can be normalised manually with **Apply aliases to current workspace**.
+- The panel also warns when obvious same-team spelling variants are already present in the workspace.
 
-## Why it matters
+## Still included from P25
 
-For manually managed leagues such as Brasileirão Série A, you can now verify that the imported results/team evidence look sensible before relying on Quick Prediction, evidence gates or leaderboard outputs.
-
-## Still included from P26
-
-- Team Alias / Name Normalisation panel.
-- Alias rules applied before custom competition import preview/update.
 - Import preview before applying custom competition or prediction-ready imports.
 - Append / update matching fixtures / replace imported competition only / replace entire workspace.
+- Tip-risk and duplicate-row preview.
 - Teams + Fixtures XLSX workbook import.
-- Hardened public-registry lockfile guard.
+- Hardened lockfile guard.
 
 ## Recommended weekly workflow
 
@@ -34,9 +34,6 @@ Data & Import
 → Update matching fixtures
 → Review import preview and alias changes
 → Apply this import
-→ Competition tab
-→ Check standings/results snapshot
-→ Tip Now
 ```
 
 Use **Update matching fixtures** for normal weekly updates so fixture IDs and submitted tips are preserved.

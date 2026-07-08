@@ -41,6 +41,7 @@ import {
   calculateServeGap,
   calculateServeStrength,
   calculateSurfaceGap,
+  calculateHeadToHeadGap,
   calculateQualityFromRanking,
   runTennisPrediction,
   emptyTennisManualFactors,
@@ -59,7 +60,6 @@ import {
   getAwayTeamsForMatchup,
   getTeamsForCompetition,
 } from "../lib/quickPrediction";
-import { getCompetitionNames, summariseCompetition } from "../lib/competitionInsights";
 
 function assertBetween(value: number, min: number, max: number, label: string) {
   assert.ok(
@@ -687,6 +687,35 @@ function runTennisScoringSmokeTests() {
 
   const noSurfaceData = calculateSurfaceGap("Player A", "Player B", null, null, "Grass");
   assert.equal(noSurfaceData.surfaceGap, 0, "missing surface data for either player should stay neutral, not crash");
+
+  // Locked to the exact real getH2HInfo response captured (Djokovic vs an
+  // opponent, id 5992 vs 677): Hard 16-5, Clay 9-20, I.hard 4-1, Carpet 0-1,
+  // Grass 2-2 -> totals 31-29, an almost-even H2H that should round to 0.
+  const closeH2H = calculateHeadToHeadGap("Player A", "Player B", { playerAWins: 31, playerBWins: 29 });
+  assert.equal(closeH2H.headToHeadGap, 0, "an almost-even 31-29 H2H record should round to a neutral gap");
+
+  const dominantH2H = calculateHeadToHeadGap("Player A", "Player B", { playerAWins: 18, playerBWins: 2 });
+  assert.ok(dominantH2H.headToHeadGap > 0, "a lopsided H2H record should produce a clearly positive gap");
+
+  const noH2H = calculateHeadToHeadGap("Player A", "Player B", null);
+  assert.equal(noH2H.headToHeadGap, 0, "no head-to-head history should stay neutral, not crash");
+
+  // runTennisPrediction: manual head-to-head edge should override the
+  // automatic H2H gap, not add on top of it.
+  const neutralGates = { qualityGap: 0, playerAStrength: 50, playerBStrength: 50, evidence: [] };
+  const neutralForm = { formGap: 0, playerAFormScore: 50, playerBFormScore: 50, evidence: [] };
+  const strongAutoH2H = calculateHeadToHeadGap("Player A", "Player B", { playerAWins: 18, playerBWins: 2 });
+
+  const usingAutomaticH2H = runTennisPrediction(
+    "Player A", "Player B", neutralGates, neutralForm, emptyTennisManualFactors, null, null, strongAutoH2H,
+  );
+  assert.equal(usingAutomaticH2H.playerAEdge, strongAutoH2H.headToHeadGap, "with no manual override, the automatic H2H gap should drive the edge");
+
+  const overriddenH2H = runTennisPrediction(
+    "Player A", "Player B", neutralGates, neutralForm,
+    { headToHeadEdge: -5, otherFactorsEdge: 0 }, null, null, strongAutoH2H,
+  );
+  assert.equal(overriddenH2H.playerAEdge, -5, "a non-zero manual head-to-head edge should override the automatic H2H gap, not add to it");
 }
 
 
@@ -805,44 +834,34 @@ function runTeamAliasSmokeTests() {
   variantFixture.awayTeam = "Gremio";
   const issues = detectTeamNameIssues([fixture, variantFixture]);
   assert.ok(issues.some((issue) => issue.variants.includes("Sao Paulo") && issue.variants.includes("São Paulo")));
-}
 
+  // A global rule added first shouldn't block a more specific,
+  // competition-scoped override for the same alias added afterward.
+  const globalThenScoped = [
+    { id: "global", alias: "Vitoria", canonical: "Vitória" },
+    { id: "scoped", alias: "Vitoria", canonical: "Vitória SC", competition: "Copa Regional" },
+  ];
+  assert.equal(
+    normaliseTeamNameWithAliases("Vitoria", "Copa Regional", globalThenScoped),
+    "Vitória SC",
+    "a competition-scoped rule should win even though the global rule appears first in the array",
+  );
+  assert.equal(
+    normaliseTeamNameWithAliases("Vitoria", "Some Other Competition", globalThenScoped),
+    "Vitória",
+    "the global rule should still apply for competitions the scoped rule doesn't cover",
+  );
 
-function runCompetitionInsightsSmokeTests() {
-  const finalOne = createBlankFixture("Round 1", "Smoke League");
-  finalOne.id = "smoke-final-1";
-  finalOne.date = "2026-01-01";
-  finalOne.homeTeam = "Lions";
-  finalOne.awayTeam = "Tigers";
-  finalOne.matchResult = { status: "final", homeGoals: 2, awayGoals: 1 };
-  finalOne.homeStats = { ...finalOne.homeStats, played: 3, points: 7, wins: 2, draws: 1, losses: 0, goalsFor: 6, goalsAgainst: 2 };
-  finalOne.awayStats = { ...finalOne.awayStats, played: 3, points: 4, wins: 1, draws: 1, losses: 1, goalsFor: 4, goalsAgainst: 4 };
-
-  const finalTwo = createBlankFixture("Round 2", "Smoke League");
-  finalTwo.id = "smoke-final-2";
-  finalTwo.date = "2026-01-08";
-  finalTwo.homeTeam = "Tigers";
-  finalTwo.awayTeam = "Bears";
-  finalTwo.matchResult = { status: "final", homeGoals: 0, awayGoals: 0 };
-
-  const pending = createBlankFixture("Round 3", "Smoke League");
-  pending.id = "smoke-pending";
-  pending.date = "2026-01-15";
-  pending.homeTeam = "Lions";
-  pending.awayTeam = "Bears";
-
-  const names = getCompetitionNames([finalOne, finalTwo, pending]);
-  assert.deepEqual(names, ["Smoke League"]);
-
-  const insights = summariseCompetition([finalOne, finalTwo, pending], "Smoke League");
-  assert.equal(insights.fixtureCount, 3);
-  assert.equal(insights.finalResultCount, 2);
-  assert.equal(insights.pendingFixtureCount, 1);
-  assert.equal(insights.teamCount, 3);
-  assert.equal(insights.resultStandings[0].team, "Lions");
-  assert.equal(insights.resultStandings[0].points, 3);
-  assert.ok(insights.evidenceStandings.some((row) => row.team === "Lions" && row.points === 7));
-  assert.equal(insights.recentResults.length, 2);
+  // Same check with the scoped rule added first, to confirm it's genuinely
+  // priority-based and not just an accident of array order.
+  const scopedThenGlobal = [
+    { id: "scoped", alias: "Vitoria", canonical: "Vitória SC", competition: "Copa Regional" },
+    { id: "global", alias: "Vitoria", canonical: "Vitória" },
+  ];
+  assert.equal(
+    normaliseTeamNameWithAliases("Vitoria", "Copa Regional", scopedThenGlobal),
+    "Vitória SC",
+  );
 }
 
 function runLiveFixtureMaintenanceSmokeTests() {
@@ -881,8 +900,7 @@ runLiveFixtureMaintenanceSmokeTests();
 runCustomCompetitionImportSmokeTests();
 runImportPreviewSmokeTests();
 runTeamAliasSmokeTests();
-runCompetitionInsightsSmokeTests();
 runQuickPredictionSmokeTests();
 runTennisScoringSmokeTests();
 
-console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, custom competition import, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns, import previews, team aliases, competition insights and tennis scoring engine.");
+console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, custom competition import, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns, import previews, team aliases and tennis scoring engine.");
