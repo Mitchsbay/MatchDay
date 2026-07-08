@@ -54,11 +54,29 @@ export async function syncLiveFixtures(
     fetchUpcomingMatches(competitionCode, daysAhead),
   ]);
 
+  // Knockout-stage tournaments (World Cup semifinals not yet determined, etc.)
+  // can return a placeholder team like "Winner Match 73" with id: null until
+  // the previous round is decided. Filter those out — there's nothing to
+  // look up recent form for yet, and the API rejects a null/non-integer id.
   const uniqueTeamIds = Array.from(
-    new Set(upcomingMatches.flatMap((match) => [match.homeTeam.id, match.awayTeam.id])),
+    new Set(
+      upcomingMatches
+        .flatMap((match) => [match.homeTeam.id, match.awayTeam.id])
+        .filter((id): id is number => typeof id === "number"),
+    ),
   );
   const recentFormById = await fetchRecentFormForTeams(uniqueTeamIds);
   const fetchedAt = new Date().toISOString();
+
+  // Placeholder teams (id: null) simply have no stats/form to look up yet —
+  // Map.get(null) would be a type error even though it's safe at runtime, so
+  // this makes the "no id yet" case explicit instead of relying on that.
+  function statsFor(id: number | null) {
+    return (id !== null ? teamStatsById.get(id) : undefined) ?? emptyStats;
+  }
+  function recentFormFor(id: number | null) {
+    return (id !== null ? recentFormById.get(id) : undefined) ?? [];
+  }
 
   const rows = upcomingMatches.map((match) => ({
     id: String(match.id),
@@ -67,10 +85,10 @@ export async function syncLiveFixtures(
     match_date: match.utcDate,
     home_team: match.homeTeam.name,
     away_team: match.awayTeam.name,
-    home_stats: teamStatsById.get(match.homeTeam.id) ?? emptyStats,
-    away_stats: teamStatsById.get(match.awayTeam.id) ?? emptyStats,
-    home_recent_form: recentFormById.get(match.homeTeam.id) ?? [],
-    away_recent_form: recentFormById.get(match.awayTeam.id) ?? [],
+    home_stats: statsFor(match.homeTeam.id),
+    away_stats: statsFor(match.awayTeam.id),
+    home_recent_form: recentFormFor(match.homeTeam.id),
+    away_recent_form: recentFormFor(match.awayTeam.id),
     status: "SCHEDULED",
     updated_at: fetchedAt,
   }));

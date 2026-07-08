@@ -106,8 +106,10 @@ export type UpcomingMatch = {
   utcDate: string;
   matchday: number | null;
   competitionName: string;
-  homeTeam: { id: number; name: string };
-  awayTeam: { id: number; name: string };
+  // id is null for a knockout-stage placeholder team (e.g. "Winner Match 73")
+  // whose identity isn't decided yet.
+  homeTeam: { id: number | null; name: string };
+  awayTeam: { id: number | null; name: string };
 };
 
 type MatchesResponse = {
@@ -117,8 +119,8 @@ type MatchesResponse = {
     matchday: number | null;
     status: string;
     competition: { name: string };
-    homeTeam: { id: number; name: string };
-    awayTeam: { id: number; name: string };
+    homeTeam: { id: number | null; name: string };
+    awayTeam: { id: number | null; name: string };
   }>;
 };
 
