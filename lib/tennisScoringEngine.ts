@@ -180,6 +180,60 @@ export function calculateServeGap(
   };
 }
 
+// --- Surface Gate: actual win/loss record on the match surface --------------
+// A different signal from the Serve Gate — this is real match outcomes on a
+// given court surface (hard/clay/grass/etc.), not serve percentages. Recent
+// years matter more than a player's game from a decade ago, so this expects
+// an already-windowed win/loss count (see SURFACE_HISTORY_YEARS_BACK in
+// tennisDataClient.ts) rather than a full career total.
+export type TennisSurfaceRecord = { wins: number; losses: number } | null;
+
+export type TennisSurfaceGapResult = {
+  surfaceGap: number; // -10..+10, positive favours player A
+  playerASurfaceWinRate: number | null; // 0-100, null if no recent matches on this surface
+  playerBSurfaceWinRate: number | null;
+  evidence: string[];
+};
+
+export function calculateSurfaceGap(
+  playerAName: string,
+  playerBName: string,
+  recordA: TennisSurfaceRecord,
+  recordB: TennisSurfaceRecord,
+  surfaceName: string,
+): TennisSurfaceGapResult {
+  const winRate = (record: TennisSurfaceRecord) => {
+    if (!record) return null;
+    const total = record.wins + record.losses;
+    return total > 0 ? (record.wins / total) * 100 : null;
+  };
+
+  const rateA = winRate(recordA);
+  const rateB = winRate(recordB);
+
+  if (rateA === null || rateB === null) {
+    return {
+      surfaceGap: 0,
+      playerASurfaceWinRate: rateA,
+      playerBSurfaceWinRate: rateB,
+      evidence: [`Not enough recent ${surfaceName} matches for one or both players — Surface Gate stays neutral.`],
+    };
+  }
+
+  const surfaceGap = Math.max(-10, Math.min(10, Math.round((rateA - rateB) / 10)));
+
+  return {
+    surfaceGap,
+    playerASurfaceWinRate: Math.round(rateA * 10) / 10,
+    playerBSurfaceWinRate: Math.round(rateB * 10) / 10,
+    evidence: [
+      `${playerAName} recent ${surfaceName} record: ${recordA?.wins}-${recordA?.losses} (${Math.round(rateA)}% win rate).`,
+      `${playerBName} recent ${surfaceName} record: ${recordB?.wins}-${recordB?.losses} (${Math.round(rateB)}% win rate).`,
+      `Surface gap ${surfaceGap >= 0 ? "+" : ""}${surfaceGap} (positive favours ${playerAName}).`,
+    ],
+  };
+}
+
 // --- Prediction: combine gates, no draw outcome exists -----------------------
 export function runTennisPrediction(
   playerAName: string,
@@ -188,10 +242,12 @@ export function runTennisPrediction(
   form: TennisFormGapResult,
   manual: TennisManualFactors,
   serve: TennisServeGapResult | null = null,
+  surface: TennisSurfaceGapResult | null = null,
 ): TennisPredictionResult {
   const serveGap = serve?.serveGap ?? 0;
+  const surfaceGap = surface?.surfaceGap ?? 0;
   const playerAEdge =
-    quality.qualityGap + form.formGap + serveGap + manual.headToHeadEdge + manual.otherFactorsEdge;
+    quality.qualityGap + form.formGap + serveGap + surfaceGap + manual.headToHeadEdge + manual.otherFactorsEdge;
 
   // Quality and form pulling in opposite directions by a wide margin is a
   // genuine reason for caution, same principle as football's Conflict Gate —
@@ -227,6 +283,7 @@ export function runTennisPrediction(
     ...quality.evidence,
     ...form.evidence,
     ...(serve?.evidence ?? []),
+    ...(surface?.evidence ?? []),
     manual.headToHeadEdge !== 0
       ? `Manual head-to-head edge: ${manual.headToHeadEdge >= 0 ? "+" : ""}${manual.headToHeadEdge}.`
       : null,

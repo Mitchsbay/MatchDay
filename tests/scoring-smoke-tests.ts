@@ -38,12 +38,13 @@ import {
   calculateFormFromRecentResults as calculateTennisForm,
   calculateServeGap,
   calculateServeStrength,
+  calculateSurfaceGap,
   calculateQualityFromRanking,
   runTennisPrediction,
   emptyTennisManualFactors,
   type TennisPlayerSummary,
 } from "../lib/tennisScoringEngine";
-import { formatDateDDMMYYYY, mostRecentMonday, convertMatchStatsToServeStats } from "../lib/tennisDataClient";
+import { formatDateDDMMYYYY, mostRecentMonday, convertMatchStatsToServeStats, extractSurfaceWinRate } from "../lib/tennisDataClient";
 import {
   findFixtureForMatchup,
   getAvailableCompetitions,
@@ -588,6 +589,59 @@ function runTennisScoringSmokeTests() {
     null,
     "a player with no logged matches (all zeros) should return null, not divide by zero",
   );
+
+  // Locked to the exact real getPlayerSurfaceSummary response captured for
+  // Djokovic (player id 5992), truncated to the years actually needed.
+  const djokovicSurfaceHistory = [
+    { year: 2026, surfaces: [
+      { courtId: 1, court: "Hard", courtWins: 7, courtLosses: 2 },
+      { courtId: 5, court: "Grass", courtWins: 5, courtLosses: 0 },
+      { courtId: 2, court: "Clay", courtWins: 2, courtLosses: 2 },
+    ]},
+    { year: 2025, surfaces: [
+      { courtId: 1, court: "Hard", courtWins: 21, courtLosses: 7 },
+      { courtId: 5, court: "Grass", courtWins: 5, courtLosses: 1 },
+      { courtId: 3, court: "I.hard", courtWins: 4, courtLosses: 0 },
+      { courtId: 2, court: "Clay", courtWins: 9, courtLosses: 3 },
+    ]},
+    { year: 2024, surfaces: [
+      { courtId: 2, court: "Clay", courtWins: 16, courtLosses: 3 },
+      { courtId: 5, court: "Grass", courtWins: 5, courtLosses: 1 },
+      { courtId: 3, court: "I.hard", courtWins: 1, courtLosses: 0 },
+      { courtId: 1, court: "Hard", courtWins: 15, courtLosses: 5 },
+    ]},
+    // Old data, outside the 3-year window from currentYear=2026 -- should be excluded.
+    { year: 2020, surfaces: [{ courtId: 1, court: "Hard", courtWins: 999, courtLosses: 999 }] },
+  ];
+
+  const hardWinRate = extractSurfaceWinRate(djokovicSurfaceHistory, "Hard", 2026, 3);
+  assert.deepEqual(hardWinRate, { wins: 43, losses: 14, winRatePct: 75.4 });
+
+  const clayWinRate = extractSurfaceWinRate(djokovicSurfaceHistory, "Clay", 2026, 3);
+  assert.deepEqual(clayWinRate, { wins: 27, losses: 8, winRatePct: 77.1 });
+
+  const grassWinRate = extractSurfaceWinRate(djokovicSurfaceHistory, "Grass", 2026, 3);
+  assert.deepEqual(grassWinRate, { wins: 15, losses: 2, winRatePct: 88.2 });
+
+  // Case-insensitive surface matching, and a surface never played in the window.
+  assert.deepEqual(extractSurfaceWinRate(djokovicSurfaceHistory, "hard", 2026, 3), hardWinRate);
+  assert.equal(
+    extractSurfaceWinRate(djokovicSurfaceHistory, "Carpet", 2026, 3),
+    null,
+    "a surface with no recent matches should return null, not zero",
+  );
+
+  const strongOnSurface = calculateSurfaceGap(
+    "Player A",
+    "Player B",
+    { wins: 40, losses: 5 },
+    { wins: 20, losses: 20 },
+    "Clay",
+  );
+  assert.ok(strongOnSurface.surfaceGap > 0, "a much better surface record should get a positive surface gap");
+
+  const noSurfaceData = calculateSurfaceGap("Player A", "Player B", null, null, "Grass");
+  assert.equal(noSurfaceData.surfaceGap, 0, "missing surface data for either player should stay neutral, not crash");
 }
 
 function runLiveFixtureMaintenanceSmokeTests() {

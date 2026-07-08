@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchTennisRecentForm, fetchTennisServeStats } from "../../../../lib/tennisDataClient";
+import {
+  fetchTennisRecentForm,
+  fetchTennisServeStats,
+  fetchTennisSurfaceWinRate,
+} from "../../../../lib/tennisDataClient";
 import {
   calculateQualityFromRanking,
   calculateFormFromRecentResults,
   calculateServeGap,
+  calculateSurfaceGap,
   runTennisPrediction,
   emptyTennisManualFactors,
   type TennisManualFactors,
@@ -24,6 +29,9 @@ export async function POST(req: NextRequest) {
       // numbers from elsewhere). Leave unset to use the automatic fetch.
       serveStatsA?: TennisServeStats;
       serveStatsB?: TennisServeStats;
+      // Which court surface this matchup is being played on. Omit or leave
+      // empty to skip the Surface Gate entirely (it stays neutral).
+      surface?: string;
     };
 
     if (!body.playerA || !body.playerB) {
@@ -34,16 +42,27 @@ export async function POST(req: NextRequest) {
     const manual: TennisManualFactors = { ...emptyTennisManualFactors, ...body.manual };
     const playerA = body.playerA;
     const playerB = body.playerB;
+    const surfaceName = body.surface?.trim();
 
     // Rank/points already came from the rankings list the dropdown loaded —
-    // no need to re-fetch a player profile just for that. Form and serve
-    // stats each need their own call: 4 requests per prediction total,
-    // comfortably inside the 50/day free quota (~12 predictions/day).
-    const [playerARecentForm, playerBRecentForm, fetchedServeStatsA, fetchedServeStatsB] = await Promise.all([
+    // no need to re-fetch a player profile just for that. Form, serve, and
+    // surface each need their own call: up to 6 requests per prediction when
+    // a surface is specified (~8 predictions/day), or 4 without one, staying
+    // inside the 50/day free quota either way.
+    const [
+      playerARecentForm,
+      playerBRecentForm,
+      fetchedServeStatsA,
+      fetchedServeStatsB,
+      surfaceRecordA,
+      surfaceRecordB,
+    ] = await Promise.all([
       fetchTennisRecentForm(tour, playerA.id),
       fetchTennisRecentForm(tour, playerB.id),
       body.serveStatsA ? Promise.resolve(null) : fetchTennisServeStats(tour, playerA.id),
       body.serveStatsB ? Promise.resolve(null) : fetchTennisServeStats(tour, playerB.id),
+      surfaceName ? fetchTennisSurfaceWinRate(tour, playerA.id, surfaceName) : Promise.resolve(null),
+      surfaceName ? fetchTennisSurfaceWinRate(tour, playerB.id, surfaceName) : Promise.resolve(null),
     ]);
 
     const serveStatsA = body.serveStatsA ?? fetchedServeStatsA;
@@ -52,7 +71,10 @@ export async function POST(req: NextRequest) {
     const quality = calculateQualityFromRanking(playerA, playerB);
     const form = calculateFormFromRecentResults(playerA.name, playerB.name, playerARecentForm, playerBRecentForm);
     const serve = calculateServeGap(playerA.name, playerB.name, serveStatsA, serveStatsB);
-    const prediction = runTennisPrediction(playerA.name, playerB.name, quality, form, manual, serve);
+    const surface = surfaceName
+      ? calculateSurfaceGap(playerA.name, playerB.name, surfaceRecordA, surfaceRecordB, surfaceName)
+      : null;
+    const prediction = runTennisPrediction(playerA.name, playerB.name, quality, form, manual, serve, surface);
 
     return NextResponse.json({
       ok: true,
@@ -64,6 +86,7 @@ export async function POST(req: NextRequest) {
       quality,
       form,
       serve,
+      surface,
       prediction,
     });
   } catch (err) {

@@ -171,3 +171,61 @@ export async function fetchTennisServeStats(
   const data = await getJson<MatchStatsResponse>(`/${tour}/player/match-stats/${playerId}`);
   return convertMatchStatsToServeStats(data.data?.serviceStats);
 }
+
+// --- Surface record: win/loss by court surface, per year --------------------
+// A different signal from serve stats — this is actual match win/loss record
+// on a given surface, not serve percentages. Verified against a real response
+// for Djokovic (id 5992): one entry per year back to 2004, each with a list
+// of surfaces played that year and the win/loss count on each.
+
+export type SurfaceYearEntry = {
+  year: number;
+  surfaces: Array<{ courtId: number; court: string; courtWins: number; courtLosses: number }>;
+};
+
+type SurfaceSummaryResponse = {
+  data: SurfaceYearEntry[];
+};
+
+export const SURFACE_HISTORY_YEARS_BACK = 3;
+
+export type SurfaceWinRate = { wins: number; losses: number; winRatePct: number } | null;
+
+// Pure and exported separately so it can be smoke-tested against the exact
+// real payload captured for Djokovic, without needing a live network call.
+export function extractSurfaceWinRate(
+  data: SurfaceYearEntry[],
+  courtName: string,
+  currentYear: number,
+  yearsBack: number = SURFACE_HISTORY_YEARS_BACK,
+): SurfaceWinRate {
+  const earliestYear = currentYear - yearsBack + 1;
+  let wins = 0;
+  let losses = 0;
+
+  for (const yearEntry of data) {
+    if (yearEntry.year < earliestYear) continue;
+    const surface = yearEntry.surfaces.find(
+      (s) => s.court.toLowerCase() === courtName.toLowerCase(),
+    );
+    if (surface) {
+      wins += surface.courtWins;
+      losses += surface.courtLosses;
+    }
+  }
+
+  const totalMatches = wins + losses;
+  if (totalMatches === 0) return null;
+
+  return { wins, losses, winRatePct: Math.round((wins / totalMatches) * 1000) / 10 };
+}
+
+export async function fetchTennisSurfaceWinRate(
+  tour: TennisTour,
+  playerId: number,
+  courtName: string,
+): Promise<SurfaceWinRate> {
+  const data = await getJson<SurfaceSummaryResponse>(`/${tour}/player/surface-summary/${playerId}`);
+  const currentYear = new Date().getUTCFullYear();
+  return extractSurfaceWinRate(data.data, courtName, currentYear);
+}

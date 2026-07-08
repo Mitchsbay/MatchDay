@@ -8,6 +8,7 @@ import type {
   TennisQualityResult,
   TennisServeGapResult,
   TennisServeStats,
+  TennisSurfaceGapResult,
   TennisTour,
 } from "../lib/tennisScoringEngine";
 
@@ -27,6 +28,7 @@ type MatchupResponse = {
   quality: TennisQualityResult;
   form: TennisFormGapResult;
   serve: TennisServeGapResult;
+  surface: TennisSurfaceGapResult | null;
   prediction: TennisPredictionResult;
 };
 
@@ -95,6 +97,7 @@ export function TennisQuickPredictionPanel() {
   const emptyServeStats: TennisServeStats = { firstServeInPct: 0, firstServeWinPct: 0, secondServeWinPct: 0 };
   const [serveStatsA, setServeStatsA] = useState<TennisServeStats>(emptyServeStats);
   const [serveStatsB, setServeStatsB] = useState<TennisServeStats>(emptyServeStats);
+  const [surface, setSurface] = useState("");
   const [isPredicting, setIsPredicting] = useState(false);
   const [predictionMessage, setPredictionMessage] = useState("");
   const [result, setResult] = useState<MatchupResponse | null>(null);
@@ -154,6 +157,7 @@ export function TennisQuickPredictionPanel() {
           manual,
           serveStatsA: hasServeStatsA ? serveStatsA : undefined,
           serveStatsB: hasServeStatsB ? serveStatsB : undefined,
+          surface: surface || undefined,
         }),
       });
       const payload = (await res.json()) as MatchupResponse;
@@ -183,6 +187,16 @@ export function TennisQuickPredictionPanel() {
           <select value={tour} onChange={(event) => setTour(event.target.value as TennisTour)}>
             <option value="atp">ATP (men&apos;s)</option>
             <option value="wta">WTA (women&apos;s)</option>
+          </select>
+        </label>
+        <label>Surface (optional — enables the Surface Gate)
+          <select value={surface} onChange={(event) => setSurface(event.target.value)}>
+            <option value="">None — skip Surface Gate</option>
+            <option value="Hard">Hard</option>
+            <option value="Clay">Clay</option>
+            <option value="Grass">Grass</option>
+            <option value="I.hard">Indoor Hard</option>
+            <option value="Carpet">Carpet</option>
           </select>
         </label>
       </div>
@@ -292,6 +306,9 @@ export function TennisQuickPredictionPanel() {
             {result.playerB.currentRank ?? "—"}, form {result.playerBRecentForm.join("-") || "n/a"}
             {result.serve.serveGap !== 0 && (
               <> · Serve gap {result.serve.serveGap >= 0 ? "+" : ""}{result.serve.serveGap} ({result.serve.playerAServeScore} vs {result.serve.playerBServeScore})</>
+            )}
+            {result.surface && result.surface.surfaceGap !== 0 && (
+              <> · Surface gap {result.surface.surfaceGap >= 0 ? "+" : ""}{result.surface.surfaceGap} ({result.surface.playerASurfaceWinRate ?? "—"}% vs {result.surface.playerBSurfaceWinRate ?? "—"}%)</>
             )}
           </div>
         </div>
