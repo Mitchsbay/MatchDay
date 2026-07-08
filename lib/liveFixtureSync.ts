@@ -80,7 +80,12 @@ export async function syncLiveFixtures(
 
   const rows = upcomingMatches.map((match) => ({
     id: String(match.id),
+    // `competition` is the free-text display name shown in the UI;
+    // `competition_code` (see supabase/schema.sql) is the stable code the
+    // dropdowns actually filter by — these are deliberately two different
+    // columns, not the same value twice.
     competition: match.competitionName,
+    competition_code: competitionCode,
     round: match.matchday ? `Matchday ${match.matchday}` : null,
     match_date: match.utcDate,
     home_team: match.homeTeam.name ?? "TBD",

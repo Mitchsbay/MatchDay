@@ -10,6 +10,7 @@ import { createBlankFixture } from "./workspace";
 export type LiveFixtureRow = {
   id: string;
   competition: string;
+  competition_code: string | null;
   round: string | null;
   match_date: string;
   home_team: string;
@@ -62,7 +63,7 @@ export function mapLiveFixtureRow(row: LiveFixtureRow): Fixture {
 
 export async function fetchLiveFixtures(
   supabase: SupabaseClient | null,
-  competition?: string
+  competitionCode?: string
 ): Promise<LiveFixturesFetchResult> {
   if (!supabase) {
     return {
@@ -76,7 +77,7 @@ export async function fetchLiveFixtures(
     .select("*")
     .gte("match_date", new Date().toISOString())
     .order("match_date", { ascending: true });
-  if (competition) query = query.eq("competition", competition);
+  if (competitionCode) query = query.eq("competition_code", competitionCode);
 
   const { data, error } = await query;
   if (error) {
@@ -85,7 +86,14 @@ export async function fetchLiveFixtures(
 
   const rows = (data ?? []) as LiveFixtureRow[];
   if (rows.length === 0) {
-    return { fixtures: [], warnings: ["No live fixtures yet — the cron job may not have run."] };
+    return {
+      fixtures: [],
+      warnings: [
+        competitionCode
+          ? `No cached fixtures for competition code "${competitionCode}" yet — refresh that competition in Live Fixture Maintenance first.`
+          : "No live fixtures yet — the cron job may not have run.",
+      ],
+    };
   }
 
   return { fixtures: rows.map(mapLiveFixtureRow), warnings: [] };

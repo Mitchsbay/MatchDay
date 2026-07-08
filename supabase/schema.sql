@@ -77,6 +77,15 @@ create table if not exists public.live_fixtures (
   updated_at timestamptz not null default now()
 );
 
+-- `competition` above is football-data.org's human-readable display name
+-- (e.g. "FIFA World Cup"), which varies by competition and isn't reliable to
+-- filter on. `competition_code` is the short code the app actually requests
+-- data with (e.g. "WC", "PL") and is what the UI's competition dropdowns
+-- filter by. Added after the initial table; safe to run again on an
+-- existing table.
+alter table public.live_fixtures add column if not exists competition_code text;
+create index if not exists live_fixtures_competition_code_idx on public.live_fixtures (competition_code);
+
 create index if not exists live_fixtures_match_date_idx on public.live_fixtures (match_date);
 create index if not exists live_fixtures_competition_idx on public.live_fixtures (competition);
 

@@ -371,6 +371,7 @@ function runWorkspaceBatchAndLiveFixturesSmokeTests() {
   const row: LiveFixtureRow = {
     id: "12345",
     competition: "Premier League",
+    competition_code: "PL",
     round: "Matchday 10",
     match_date: "2026-11-01T15:00:00Z",
     home_team: "Arsenal",
