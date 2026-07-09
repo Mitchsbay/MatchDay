@@ -237,3 +237,9 @@ button.danger {
   border-color: rgba(239,68,68,.45);
   color: #fca5a5;
 }
+
+.bankroll-table { display: grid; gap: 8px; margin-top: 14px; }
+.bankroll-row { display: grid; grid-template-columns: 1fr 1.5fr 1fr .8fr .6fr .7fr .7fr .7fr .85fr; gap: 10px; align-items: start; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: rgba(31,41,55,.45); color: var(--muted); font-size: 13px; }
+.bankroll-row span:nth-child(2), .bankroll-row span:nth-child(8), .bankroll-row span:nth-child(9) { color: var(--text); font-weight: 800; }
+.bankroll-row.header-row { color: var(--text); font-weight: 800; background: rgba(14,165,233,.12); }
+@media (max-width: 1100px) { .bankroll-row { grid-template-columns: 1fr; } }

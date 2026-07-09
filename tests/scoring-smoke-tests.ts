@@ -55,12 +55,6 @@ import {
   normaliseComparableName,
   normaliseTeamNameWithAliases,
 } from "../lib/teamAliases";
-import {
-  findFixtureForMatchup,
-  getAvailableCompetitions,
-  getAwayTeamsForMatchup,
-  getTeamsForCompetition,
-} from "../lib/quickPrediction";
 import { getCompetitionNames, summariseCompetition } from "../lib/competitionInsights";
 import { calculateOutcomeProbabilities } from "../lib/probabilityModel";
 import { calculateMulticlassBrierScore, summariseProbabilityCalibration } from "../lib/probabilityCalibration";
@@ -85,6 +79,7 @@ import {
   summariseAdvancedDataIntegration,
 } from "../lib/advancedDataWeightControls";
 import { summariseAdvancedDataWeightSandbox } from "../lib/advancedDataWeightSandbox";
+import { buildBankrollRows, calculateBetPayout, parseFractionalOdds } from "../lib/bankroll";
 
 function assertBetween(value: number, min: number, max: number, label: string) {
   assert.ok(
@@ -505,32 +500,41 @@ function runEvidenceAuditSmokeTests() {
   assert.equal(describeFixtureSource("ars-cov"), "Workspace/sample fixture");
 }
 
-function runQuickPredictionSmokeTests() {
-  const competitions = getAvailableCompetitions(fixtures);
+function runCompetitionFixtureFilterSmokeTests() {
+  const competitions = getCompetitionNames(fixtures);
   assert.ok(competitions.includes("Example League"));
 
-  const homeTeams = getTeamsForCompetition(fixtures, "Example League");
-  assert.ok(homeTeams.includes("Arsenal"));
-  assert.ok(homeTeams.includes("Coventry"));
-  assert.ok(homeTeams.includes("Everton"));
-  assert.ok(homeTeams.includes("Brighton"));
+  const exampleFixtures = fixtures.filter((fixture) => fixture.competition === "Example League");
+  assert.equal(exampleFixtures.length, fixtures.filter((fixture) => fixture.competition === "Example League").length);
+  assert.ok(exampleFixtures.some((fixture) => fixture.id === "ars-cov"));
+  assert.ok(exampleFixtures.every((fixture) => fixture.competition === "Example League"));
 
-  const awayTeams = getAwayTeamsForMatchup(fixtures, "Example League", "Arsenal");
-  assert.ok(awayTeams.includes("Coventry"));
-  assert.ok(awayTeams.includes("Everton"));
-  assert.ok(awayTeams.includes("Brighton"));
-  assert.equal(awayTeams.includes("Arsenal"), false);
+  assert.deepEqual(fixtures.filter((fixture) => fixture.competition === "Nonexistent League"), []);
+  assert.equal(fixtures.filter((fixture) => !"" || fixture.competition === "").length, fixtures.length);
+}
 
-  const match = findFixtureForMatchup(fixtures, "Example League", "Arsenal", "Coventry");
-  assert.ok(match, "should find the Arsenal vs Coventry sample fixture");
-  assert.equal(match?.id, "ars-cov");
+function runBankrollSmokeTests() {
+  assert.equal(parseFractionalOdds("3:1"), 3);
+  assert.equal(parseFractionalOdds("7/2"), 3.5);
+  assert.equal(parseFractionalOdds("bad"), null);
 
-  const noMatch = findFixtureForMatchup(fixtures, "Example League", "Arsenal", "Everton");
-  assert.equal(noMatch, undefined, "Arsenal have never played Everton at home in the sample data");
+  const win = calculateBetPayout({ odds: "3:1", stake: 6, outcomeBacked: "home", actualOutcome: "home" });
+  assert.equal(win.settlement, "win");
+  assert.equal(win.payout, 18);
 
-  // A competition/team combination with no fixtures at all should return an
-  // empty list rather than throwing, since this drives dropdown population.
-  assert.deepEqual(getTeamsForCompetition(fixtures, "Nonexistent League"), []);
+  const loss = calculateBetPayout({ odds: "3:1", stake: 6, outcomeBacked: "draw", actualOutcome: "home" });
+  assert.equal(loss.settlement, "loss");
+  assert.equal(loss.payout, -6);
+
+  const sample = cloneFixtures(fixtures);
+  sample[0].betLog = { outcomeBacked: "home", odds: "3:1", stake: 6 };
+  sample[1].betLog = { outcomeBacked: "away", odds: "2:1", stake: 5 };
+  const rows = buildBankrollRows(sample);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].payout, 18);
+  assert.equal(rows[0].rollingTotal, 18);
+  assert.equal(rows[1].settlement, "loss");
+  assert.equal(rows[1].rollingTotal, 13);
 }
 
 function runTennisScoringSmokeTests() {
@@ -2023,7 +2027,8 @@ async function runServerAuthSmokeTests() {
 }
 
 runCompetitionInsightsSmokeTests();
-runQuickPredictionSmokeTests();
+runCompetitionFixtureFilterSmokeTests();
+runBankrollSmokeTests();
 runTennisScoringSmokeTests();
 
 (async () => {

@@ -1,13 +1,5 @@
 import { ALL_ROUNDS } from "../lib/workspace";
 
-type RoundSummary = {
-  roundName: string;
-  fixtures: number;
-  pendingFixtures: number;
-  published: number;
-  hitRate: number;
-};
-
 type AccuracySummary = {
   finalFixtures: number;
   hitRate: number;
@@ -17,7 +9,6 @@ type RoundManagementProps = {
   selectedRound: string;
   selectedRoundLabel: string;
   roundNames: string[];
-  roundSummaries: RoundSummary[];
   visibleFixtureCount: number;
   selectedRoundAccuracySummary: AccuracySummary;
   onAddRound: () => void;
@@ -28,7 +19,6 @@ export function RoundManagement({
   selectedRound,
   selectedRoundLabel,
   roundNames,
-  roundSummaries,
   visibleFixtureCount,
   selectedRoundAccuracySummary,
   onAddRound,
@@ -36,10 +26,9 @@ export function RoundManagement({
 }: RoundManagementProps) {
   return (
     <section className="card" style={{ marginBottom: 18 }}>
-      <h3>P16 Round Management</h3>
+      <h3>Round filter</h3>
       <p className="section-help">
-        Group fixtures by round, filter the workspace, and view the leaderboard
-        for the selected round or the full competition.
+        Filter Tip Now by round. The larger round-card grid has been removed so this stays compact.
       </p>
       <div className="field-row">
         <label>
@@ -75,19 +64,6 @@ export function RoundManagement({
           <div className="label">Published Hit Rate</div>
           <div className="value">{selectedRoundAccuracySummary.hitRate}%</div>
         </div>
-      </div>
-      <div className="round-summary-grid">
-        {roundSummaries.map((summary) => (
-          <button
-            key={summary.roundName}
-            className={`round-card ${selectedRound === summary.roundName ? "active" : ""}`}
-            onClick={() => onSelectRound(summary.roundName)}
-          >
-            <strong>{summary.roundName}</strong>
-            <span>{summary.fixtures} fixtures · {summary.pendingFixtures} pending</span>
-            <span>{summary.published} published · {summary.hitRate}% hit rate</span>
-          </button>
-        ))}
       </div>
       <div className="actions">
         <button className="secondary" onClick={() => onSelectRound(ALL_ROUNDS)}>

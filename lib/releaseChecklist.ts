@@ -34,7 +34,7 @@ export type BuildReleaseChecklistInput = {
   hasSupabaseConfig: boolean;
 };
 
-export const CURRENT_RELEASE_VERSION = "0.45.0";
+export const CURRENT_RELEASE_VERSION = "0.47.2";
 
 export function buildReleaseChecklist(input: BuildReleaseChecklistInput): ReleaseChecklistSummary {
   const hasFixtures = input.fixtureCount > 0;
@@ -42,8 +42,8 @@ export function buildReleaseChecklist(input: BuildReleaseChecklistInput): Releas
 
   return {
     version: CURRENT_RELEASE_VERSION,
-    patch: "P45",
-    title: "Advanced Data Calibration Review",
+    patch: "P47.2",
+    title: "Tip Now UX + My Bankroll",
     verificationCommand: "npm run verify",
     deploymentItems: [
       {

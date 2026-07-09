@@ -24,6 +24,12 @@ export type UserTip = {
   confidence: number;
 };
 
+export type FixtureBetLog = {
+  outcomeBacked: TipPick;
+  odds: string;
+  stake: number;
+};
+
 export type Fixture = {
   id: string;
   competition: string;
@@ -44,6 +50,7 @@ export type Fixture = {
   matchResult: MatchResultInput;
   scores: MatchScores;
   advancedEvidence?: FixtureAdvancedEvidence;
+  betLog?: FixtureBetLog;
 };
 
 export const fixtures: Fixture[] = [

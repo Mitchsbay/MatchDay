@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Entrant,
   Fixture,
+  FixtureBetLog,
   TipPick,
   UserTip,
   entrants as initialEntrants,
@@ -38,6 +39,8 @@ import { WorkspacePersistencePanel, WorkspaceRecoveryVaultPanel, WorkspaceRestor
 import { AccuracyDashboard, AdvancedDataCalibrationPanel, AdvancedDataGatePanel, AdvancedDataWeightControlsPanel, AdvancedDataWeightSandboxPanel, AdvancedEvidenceImpactPanel, AdvancedEvidencePanel, CompetitionDataQualityPanel, CompetitionInsightsPanel, EvidenceReadinessPanel, LeaderboardPanel, ModelTuningRecommendationsPanel, ModelVersionComparisonPanel, ProbabilityCalibrationPanel, ReleaseChecklistPanel, RuleLearningPanel, RuleWeightTuningPanel, TuningSandboxPanel } from "../components/DashboardPanels";
 import { PredictionSummaryPanel, FixtureDetailsPanel, EntrantsPicksPanel, ResultInputsPanel } from "../components/FixturePanels";
 import { QuickPredictionPanel } from "../components/QuickPredictionPanel";
+import { BetLoggingPanel } from "../components/BetLoggingPanel";
+import { BankrollPanel } from "../components/BankrollPanel";
 import { AuthGatePanel } from "../components/AuthGatePanel";
 import { TennisQuickPredictionPanel } from "../components/TennisPanels";
 import { TeamStrengthInputsPanel, RecentFormInputsPanel, AvailabilityInputsPanel, ContextInputsPanel, OddsInputsPanel, GateEvidencePanels, ManualGateInputsPanel, PredictionGatesPanel } from "../components/EvidenceInputPanels";
@@ -82,6 +85,7 @@ import { buildAdvancedDataGateSummary } from "../lib/advancedDataGate";
 import { defaultAdvancedDataWeightControls, type AdvancedDataWeightControls } from "../lib/advancedDataWeightControls";
 import { summariseAdvancedDataCalibration } from "../lib/advancedDataCalibration";
 import { TuningPreset, cloneTuningPresets, createTuningPreset, deleteTuningPreset, updateTuningPreset } from "../lib/tuningPresets";
+import { buildBankrollRows } from "../lib/bankroll";
 import {
   ModelChangeLogEntry,
   appendModelChangeLogEntry,
@@ -90,7 +94,7 @@ import {
 } from "../lib/modelChangeLog";
 
 export default function Home() {
-  type WorkspaceTab = "tip" | "evidence" | "data" | "analytics" | "competition" | "tennis";
+  type WorkspaceTab = "tip" | "evidence" | "data" | "analytics" | "competition" | "bankroll" | "tennis";
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("tip");
   const [fixtures, setFixtures] = useState<Fixture[]>(() => cloneFixtures(initialFixtures));
   const [activeFixtureId, setActiveFixtureId] = useState(fixtures[0]?.id ?? "");
@@ -270,7 +274,7 @@ export default function Home() {
 
   useEffect(() => {
     if (competitionNames.length === 0) return;
-    if (!selectedCompetitionView || !competitionNames.includes(selectedCompetitionView)) {
+    if (selectedCompetitionView && !competitionNames.includes(selectedCompetitionView)) {
       setSelectedCompetitionView(competitionNames[0]);
     }
   }, [competitionNames, selectedCompetitionView]);
@@ -317,27 +321,19 @@ export default function Home() {
     [visibleFixtureResults],
   );
 
-  const roundSummaries = useMemo(() => {
-    return roundNames.map((roundName) => {
-      const items = computedFixtureResults.filter(
-        (item) => normaliseRound(item.fixture.round) === roundName,
-      );
-      const finalFixtures = items.filter(
-        (item) => item.accuracy.actualOutcome !== "pending",
-      ).length;
-      const published = items.filter((item) => item.accuracy.isTipPublished).length;
-      const correct = items.filter((item) => item.accuracy.isCorrect === true).length;
-      return {
-        roundName,
-        fixtures: items.length,
-        finalFixtures,
-        pendingFixtures: items.length - finalFixtures,
-        published,
-        correct,
-        hitRate: published > 0 ? Math.round((correct / published) * 100) : 0,
-      };
-    });
-  }, [computedFixtureResults, roundNames]);
+  const tipVisibleFixtureResults = useMemo(() => {
+    if (!selectedCompetitionView) return visibleFixtureResults;
+    return visibleFixtureResults.filter((item) => item.fixture.competition === selectedCompetitionView);
+  }, [visibleFixtureResults, selectedCompetitionView]);
+
+  const displayedFixtureResults = activeTab === "tip" ? tipVisibleFixtureResults : visibleFixtureResults;
+
+  useEffect(() => {
+    if (activeTab !== "tip" || tipVisibleFixtureResults.length === 0) return;
+    if (!tipVisibleFixtureResults.some((item) => item.fixture.id === activeFixtureId)) {
+      setActiveFixtureId(tipVisibleFixtureResults[0].fixture.id);
+    }
+  }, [activeTab, tipVisibleFixtureResults, activeFixtureId]);
 
   const selectedRoundLabel = selectedRound === ALL_ROUNDS ? "All rounds" : selectedRound;
 
@@ -349,6 +345,17 @@ export default function Home() {
       ),
     [visibleFixtureResults],
   );
+
+  const tipNowAccuracySummary = useMemo(
+    () =>
+      calculateAccuracySummary(
+        tipVisibleFixtureResults.map((item) => item.accuracy),
+        tipVisibleFixtureResults.map((item) => item.confidence),
+      ),
+    [tipVisibleFixtureResults],
+  );
+
+  const bankrollRows = useMemo(() => buildBankrollRows(fixtures), [fixtures]);
 
   const evidenceAuditSummary = useMemo(
     () => summariseEvidenceAudits(visibleFixtures),
@@ -833,6 +840,24 @@ export default function Home() {
     }
   }
 
+  function updateTipCompetitionView(competition: string) {
+    setSelectedCompetitionView(competition);
+    const nextVisible = visibleFixtureResults.filter((item) => !competition || item.fixture.competition === competition);
+    if (nextVisible.length > 0 && !nextVisible.some((item) => item.fixture.id === activeFixtureId)) {
+      setActiveFixtureId(nextVisible[0].fixture.id);
+    }
+  }
+
+  function updateFixtureBetLog(betLog: FixtureBetLog | undefined) {
+    setFixtures((current) =>
+      current.map((fixture) =>
+        fixture.id === activeFixture.id
+          ? { ...fixture, betLog: betLog ? { ...betLog } : undefined }
+          : fixture,
+      ),
+    );
+  }
+
   function addRound() {
     const nextRound = `Round ${roundNames.length + 1}`;
     setSelectedRound(nextRound);
@@ -1205,10 +1230,10 @@ export default function Home() {
     <main className="container">
       <section className="header">
         <div>
-          <div className="eyebrow">Tipping Gates App · P37</div>
-          <h1>Evidence-based tipping gates with release health tracking.</h1>
+          <div className="eyebrow">Tipping Gates App · P47.2</div>
+          <h1>Evidence-based tipping gates with cleaner day-to-day tipping flow.</h1>
           <p className="lead">
-            P37 adds a competition data-quality dashboard so imported leagues can be checked before predictions are trusted.
+            P47.2 filters Tip Now by competition, adds fixture bet logging, introduces My Bankroll, and keeps round controls scoped to Tip Now.
           </p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
@@ -1229,17 +1254,6 @@ export default function Home() {
         </section>
       )}
 
-      <RoundManagement
-        selectedRound={selectedRound}
-        selectedRoundLabel={selectedRoundLabel}
-        roundNames={roundNames}
-        roundSummaries={roundSummaries}
-        visibleFixtureCount={visibleFixtureResults.length}
-        selectedRoundAccuracySummary={selectedRoundAccuracySummary}
-        onAddRound={addRound}
-        onSelectRound={updateSelectedRound}
-      />
-
       <nav className="workspace-tabs">
         <button className={activeTab === "tip" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("tip")}>
           Tip Now
@@ -1257,6 +1271,9 @@ export default function Home() {
         <button className={activeTab === "competition" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("competition")}>
           Competition
         </button>
+        <button className={activeTab === "bankroll" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("bankroll")}>
+          My Bankroll
+        </button>
         <button className={activeTab === "tennis" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("tennis")}>
           Tennis
         </button>
@@ -1267,7 +1284,7 @@ export default function Home() {
           activeFixtureId={activeFixture.id}
           fixtureCount={fixtures.length}
           selectedRoundLabel={selectedRoundLabel}
-          visibleFixtureResults={visibleFixtureResults}
+          visibleFixtureResults={displayedFixtureResults}
           onSelectFixture={setActiveFixtureId}
         />
 
@@ -1276,9 +1293,20 @@ export default function Home() {
             <>
               <QuickPredictionPanel
                 fixtures={fixtures}
+                filteredFixtureCount={tipVisibleFixtureResults.length}
+                selectedCompetition={selectedCompetitionView}
                 activeFixture={activeFixture}
                 result={result}
-                onMatchupFound={setActiveFixtureId}
+                onCompetitionChange={updateTipCompetitionView}
+              />
+              <RoundManagement
+                selectedRound={selectedRound}
+                selectedRoundLabel={selectedRoundLabel}
+                roundNames={roundNames}
+                visibleFixtureCount={tipVisibleFixtureResults.length}
+                selectedRoundAccuracySummary={tipNowAccuracySummary}
+                onAddRound={addRound}
+                onSelectRound={updateSelectedRound}
               />
               <PredictionSummaryPanel
                 fixture={activeFixture}
@@ -1294,6 +1322,7 @@ export default function Home() {
                 evidenceAudit={activeEvidenceAudit}
               />
               <FixtureDetailsPanel fixture={activeFixture} onUpdateField={updateFixtureField} />
+              <BetLoggingPanel fixture={activeFixture} onUpdateBetLog={updateFixtureBetLog} />
               <ResultInputsPanel fixture={activeFixture} accuracy={accuracy} onUpdateMatchResult={updateMatchResult} />
               <PredictionGatesPanel result={result} />
             </>
@@ -1510,6 +1539,8 @@ export default function Home() {
               <LeaderboardPanel leaderboard={leaderboard} selectedRoundLabel={selectedRoundLabel} />
             </>
           )}
+
+          {activeTab === "bankroll" && <BankrollPanel rows={bankrollRows} />}
 
           {activeTab === "tennis" && <TennisQuickPredictionPanel session={session} />}
         </div>

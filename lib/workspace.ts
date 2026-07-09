@@ -30,8 +30,9 @@ import {
 
 export const ALL_ROUNDS = "__all_rounds__";
 
-export const STORAGE_KEY = "tipping-gates-app-p47-state-v1";
+export const STORAGE_KEY = "tipping-gates-app-p47-2-state-v1";
 export const LEGACY_STORAGE_KEYS = [
+  "tipping-gates-app-p47-state-v1",
   "tipping-gates-app-p46-state-v1",
   "tipping-gates-app-p44-state-v1",
   "tipping-gates-app-p43-state-v1",
@@ -68,8 +69,9 @@ export const LEGACY_STORAGE_KEYS = [
   "tipping-gates-app-p12-state-v1",
   "tipping-gates-app-p11-state-v1",
 ];
-export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p47-cloud-workspace-id";
+export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p47-2-cloud-workspace-id";
 export const LEGACY_CLOUD_WORKSPACE_ID_KEYS = [
+  "tipping-gates-app-p47-cloud-workspace-id",
   "tipping-gates-app-p46-cloud-workspace-id",
   "tipping-gates-app-p44-cloud-workspace-id",
   "tipping-gates-app-p43-cloud-workspace-id",
@@ -155,6 +157,7 @@ export function cloneFixtures(fixtures: Fixture[]): Fixture[] {
     matchResult: { ...fixture.matchResult },
     scores: { ...fixture.scores },
     advancedEvidence: cloneAdvancedEvidence(fixture.advancedEvidence),
+    betLog: fixture.betLog ? { ...fixture.betLog } : undefined,
   }));
 }
 
@@ -261,7 +264,7 @@ export function createPersistedState(
   recoverySnapshots: WorkspaceRecoverySnapshot[] = [],
 ): PersistedAppState {
   return {
-    version: "0.46.0",
+    version: "0.47.2",
     savedAt: new Date().toISOString(),
     fixtures: cloneFixtures(fixtures),
     activeFixtureId,
@@ -297,6 +300,7 @@ export function createBlankFixture(round: string, competition = "New Competition
     oddsMarket: { ...emptyOddsMarket },
     matchResult: { ...emptyMatchResult },
     scores: { ...emptyScores },
+    betLog: undefined,
   };
 }
 
@@ -493,7 +497,7 @@ export function applyFixtureBatch(
       const existing = currentByKey.get(fixtureMatchKey(fixture));
       if (!existing) return fixture;
       updatedIds.add(existing.id);
-      return { ...fixture, id: existing.id };
+      return { ...fixture, id: existing.id, betLog: existing.betLog ? { ...existing.betLog } : fixture.betLog };
     });
     const importedKeys = new Set(newFixtures.map(fixtureMatchKey));
     const preservedFixtures = currentFixtures.filter((fixture) => !importedKeys.has(fixtureMatchKey(fixture)));

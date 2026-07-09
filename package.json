@@ -1,7 +1,7 @@
 {
   "name": "tipping-gates-app",
   "private": true,
-  "version": "0.47.1",
+  "version": "0.47.3",
   "engines": {
     "node": "24.x"
   },

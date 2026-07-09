@@ -115,3 +115,51 @@ The P47 UI made a new competition import look like a replace/update action. This
 
 ### Version
 - 0.47.1
+
+## P47.2 — Tip Now UX + My Bankroll
+
+What changed:
+- Reworked Tip Now so the competition dropdown filters the left fixture list by already-loaded fixtures instead of acting as a home/away matchup finder.
+- Retired the football team-vs-team Quick Prediction picker code path from the live UI and replaced it with competition filtering using the same selected competition concept used elsewhere.
+- Added per-fixture My Bet Log inputs: outcome backed, fractional odds, and stake.
+- Added a My Bankroll tab/page that automatically lists logged bets, calculates win/loss from fixture.matchResult, calculates payout, and shows rolling total by fixture date order.
+- Removed the redundant round-card grid from RoundManagement.
+- Moved RoundManagement below the workspace tabs and scoped it to Tip Now only.
+- Kept Result / Accuracy Inputs separate from bet logging.
+
+Standing items:
+- Tennis H2H gate: left alone / preserved.
+- Alias-priority fix: left alone / preserved.
+- P28 probability rounding fix: left alone / preserved.
+- Lockfile guard: preserved.
+
+Version: 0.47.2
+Verification:
+- npm run check:lockfile
+- npm run typecheck
+- npm run test:smoke
+- npm run build
+
+## P47.3 — Repository Cleanup / Dead Quick Prediction Removal
+
+What changed:
+- Deleted the unused `lib/quickPrediction.ts` helper after Tip Now moved to competition-based fixture filtering.
+- Updated the smoke test to verify the Tip Now competition filtering behaviour directly from the fixture list instead of importing the retired helper.
+- Removed the accidentally nested duplicate project tree under `components/` (`components/app`, `components/components`, `components/lib`, and related duplicate repo folders/files).
+
+Why:
+- Avoids future confusion from editing duplicate dead files.
+- Keeps the repo package smaller and clearer.
+- Confirms the old team-vs-team quick prediction helper is no longer part of the active implementation.
+
+Standing items:
+- Tennis H2H gate: left alone / preserved.
+- Alias-priority fix: left alone / preserved.
+- P28 probability rounding fix: left alone / preserved.
+- Lockfile guard: left alone / preserved.
+
+Version: 0.47.3
+
+Verification:
+- `npm run check:lockfile` passed.
+- Full dependency-backed verification should be rerun after installing dependencies.
