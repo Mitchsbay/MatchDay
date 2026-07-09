@@ -1947,8 +1947,8 @@ function runReleaseChecklistSmokeTests() {
     hasSupabaseConfig: false,
   });
 
-  assert.equal(summary.version, "0.45.0");
-  assert.equal(summary.patch, "P45");
+  assert.equal(summary.version, "0.47.3");
+  assert.equal(summary.patch, "P47.3");
   assert.ok(summary.deploymentItems.some((item) => item.id === "lockfile" && item.status === "pass"));
   assert.ok(summary.deploymentItems.some((item) => item.id === "supabase" && item.status === "warn"));
   assert.equal(summary.standingItems.length, 4);
