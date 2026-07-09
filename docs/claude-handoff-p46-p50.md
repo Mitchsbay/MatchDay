@@ -186,3 +186,12 @@ Version: 0.47.4
 Verification:
 - npm run check:lockfile passed.
 - Full dependency install/typecheck/build could not be completed in this container because npm ci was terminated before node_modules installed.
+
+
+## P47.5 — Fixture Dedupe / Repeated Import Safety
+
+- Added canonical fixture de-duplication by competition, round, date, home team and away team.
+- Append/Add New now skips exact fixture matches instead of multiplying them when the same workbook is applied repeatedly.
+- Workspace clone/load/save paths now sanitize duplicate fixtures, so existing duplicated local/cloud workspaces are cleaned on restore/autosave.
+- Preserves existing fixture IDs, bet logs and final results when merging duplicates.
+- Tennis files were left untouched.

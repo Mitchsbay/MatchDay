@@ -783,6 +783,13 @@ function runImportPreviewSmokeTests() {
 
   const duplicatePreview = getFixtureBatchPreview([newFixture, { ...newFixture, id: "dupe" }], current, "append");
   assert.equal(duplicatePreview.duplicateImportCount, 1);
+  assert.equal(duplicatePreview.addedFixtureCount, 1);
+  assert.equal(duplicatePreview.finalFixtureCount, current.length + 1);
+
+  const repeatAppendPreview = getFixtureBatchPreview([current[0]], current, "append");
+  assert.equal(repeatAppendPreview.matchingFixtureCount, 1);
+  assert.equal(repeatAppendPreview.addedFixtureCount, 0);
+  assert.equal(repeatAppendPreview.finalFixtureCount, current.length);
 
   const brandNewCompetitionFixture = createBlankFixture("Round 1", "USL Championship");
   brandNewCompetitionFixture.id = "usl-new-import";
@@ -1854,8 +1861,8 @@ function runReleaseChecklistSmokeTests() {
     hasSupabaseConfig: false,
   });
 
-  assert.equal(summary.version, "0.47.4");
-  assert.equal(summary.patch, "P47.4");
+  assert.equal(summary.version, "0.47.5");
+  assert.equal(summary.patch, "P47.5");
   assert.ok(summary.deploymentItems.some((item) => item.id === "lockfile" && item.status === "pass"));
   assert.ok(summary.deploymentItems.some((item) => item.id === "supabase" && item.status === "warn"));
   assert.equal(summary.standingItems.length, 4);

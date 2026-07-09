@@ -25,8 +25,9 @@ import {
 
 export const ALL_ROUNDS = "__all_rounds__";
 
-export const STORAGE_KEY = "tipping-gates-app-p47-4-state-v1";
+export const STORAGE_KEY = "tipping-gates-app-p47-5-state-v1";
 export const LEGACY_STORAGE_KEYS = [
+  "tipping-gates-app-p47-4-state-v1",
   "tipping-gates-app-p47-2-state-v1",
   "tipping-gates-app-p47-state-v1",
   "tipping-gates-app-p46-state-v1",
@@ -65,8 +66,9 @@ export const LEGACY_STORAGE_KEYS = [
   "tipping-gates-app-p12-state-v1",
   "tipping-gates-app-p11-state-v1",
 ];
-export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p47-4-cloud-workspace-id";
+export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p47-5-cloud-workspace-id";
 export const LEGACY_CLOUD_WORKSPACE_ID_KEYS = [
+  "tipping-gates-app-p47-4-cloud-workspace-id",
   "tipping-gates-app-p47-2-cloud-workspace-id",
   "tipping-gates-app-p47-cloud-workspace-id",
   "tipping-gates-app-p46-cloud-workspace-id",
@@ -133,27 +135,29 @@ export function normaliseRound(round: string): string {
 }
 
 export function cloneFixtures(fixtures: Fixture[]): Fixture[] {
-  return fixtures.map((fixture) => ({
-    ...fixture,
-    homeStats: { ...fixture.homeStats },
-    awayStats: { ...fixture.awayStats },
-    homeRecentForm: fixture.homeRecentForm.map((game) => ({ ...game })),
-    awayRecentForm: fixture.awayRecentForm.map((game) => ({ ...game })),
-    homeMissingPlayers: fixture.homeMissingPlayers.map((player) => ({
-      ...player,
+  return dedupeFixturesByMatchKey(
+    fixtures.map((fixture) => ({
+      ...fixture,
+      homeStats: { ...fixture.homeStats },
+      awayStats: { ...fixture.awayStats },
+      homeRecentForm: fixture.homeRecentForm.map((game) => ({ ...game })),
+      awayRecentForm: fixture.awayRecentForm.map((game) => ({ ...game })),
+      homeMissingPlayers: fixture.homeMissingPlayers.map((player) => ({
+        ...player,
+      })),
+      awayMissingPlayers: fixture.awayMissingPlayers.map((player) => ({
+        ...player,
+      })),
+      homeContext: { ...fixture.homeContext },
+      awayContext: { ...fixture.awayContext },
+      matchContext: { ...fixture.matchContext },
+      oddsMarket: { ...fixture.oddsMarket },
+      matchResult: { ...fixture.matchResult },
+      scores: { ...fixture.scores },
+      advancedEvidence: cloneAdvancedEvidence(fixture.advancedEvidence),
+      betLog: fixture.betLog ? { ...fixture.betLog } : undefined,
     })),
-    awayMissingPlayers: fixture.awayMissingPlayers.map((player) => ({
-      ...player,
-    })),
-    homeContext: { ...fixture.homeContext },
-    awayContext: { ...fixture.awayContext },
-    matchContext: { ...fixture.matchContext },
-    oddsMarket: { ...fixture.oddsMarket },
-    matchResult: { ...fixture.matchResult },
-    scores: { ...fixture.scores },
-    advancedEvidence: cloneAdvancedEvidence(fixture.advancedEvidence),
-    betLog: fixture.betLog ? { ...fixture.betLog } : undefined,
-  }));
+  );
 }
 
 export function isPersistedAppState(value: unknown): value is PersistedAppState {
@@ -249,7 +253,7 @@ export function createPersistedState(
   recoverySnapshots: WorkspaceRecoverySnapshot[] = [],
 ): PersistedAppState {
   return {
-    version: "0.47.4",
+    version: "0.47.5",
     savedAt: new Date().toISOString(),
     fixtures: cloneFixtures(fixtures),
     activeFixtureId,
@@ -322,7 +326,7 @@ export type FixtureBatchPreview = {
   warnings: string[];
 };
 
-function fixtureMatchKey(fixture: Fixture): string {
+export function fixtureMatchKey(fixture: Fixture): string {
   return [
     fixture.competition.trim().toLowerCase(),
     normaliseRound(fixture.round).trim().toLowerCase(),
@@ -330,6 +334,37 @@ function fixtureMatchKey(fixture: Fixture): string {
     fixture.homeTeam.trim().toLowerCase(),
     fixture.awayTeam.trim().toLowerCase(),
   ].join("|");
+}
+
+
+function mergeDuplicateFixture(existing: Fixture, incoming: Fixture): Fixture {
+  const incomingHasResult = incoming.matchResult.status === "final";
+  const existingHasResult = existing.matchResult.status === "final";
+  return {
+    ...incoming,
+    id: existing.id,
+    matchResult: existingHasResult && !incomingHasResult ? { ...existing.matchResult } : { ...incoming.matchResult },
+    betLog: existing.betLog ? { ...existing.betLog } : incoming.betLog ? { ...incoming.betLog } : undefined,
+  };
+}
+
+export function dedupeFixturesByMatchKey(fixtures: Fixture[]): Fixture[] {
+  const deduped: Fixture[] = [];
+  const indexByKey = new Map<string, number>();
+
+  fixtures.forEach((fixture) => {
+    const key = fixtureMatchKey(fixture);
+    const existingIndex = indexByKey.get(key);
+    if (existingIndex === undefined) {
+      indexByKey.set(key, deduped.length);
+      deduped.push(fixture);
+      return;
+    }
+
+    deduped[existingIndex] = mergeDuplicateFixture(deduped[existingIndex], fixture);
+  });
+
+  return deduped;
 }
 
 function getCompetitionScope(newFixtures: Fixture[], requestedScope?: string[]): Set<string> {
@@ -344,22 +379,18 @@ export function getFixtureBatchPreview(
   mode: FixtureBatchMode,
   scopeCompetitions?: string[]
 ): FixtureBatchPreview {
-  const applied = applyFixtureBatch(newFixtures, currentFixtures, mode, scopeCompetitions);
+  const dedupedNewFixtures = dedupeFixturesByMatchKey(newFixtures);
+  const dedupedCurrentFixtures = dedupeFixturesByMatchKey(currentFixtures);
+  const applied = applyFixtureBatch(dedupedNewFixtures, dedupedCurrentFixtures, mode, scopeCompetitions);
   const importedCompetitions = Array.from(
-    getCompetitionScope(newFixtures, scopeCompetitions)
+    getCompetitionScope(dedupedNewFixtures, scopeCompetitions)
   ).sort();
 
-  const seenKeys = new Set<string>();
-  let duplicateImportCount = 0;
-  newFixtures.forEach((fixture) => {
-    const key = fixtureMatchKey(fixture);
-    if (seenKeys.has(key)) duplicateImportCount += 1;
-    seenKeys.add(key);
-  });
+  const duplicateImportCount = newFixtures.length - dedupedNewFixtures.length;
 
-  const currentKeys = new Set(currentFixtures.map(fixtureMatchKey));
+  const currentKeys = new Set(dedupedCurrentFixtures.map(fixtureMatchKey));
   const currentCompetitionNames = new Map<string, string>();
-  currentFixtures.forEach((fixture) => {
+  dedupedCurrentFixtures.forEach((fixture) => {
     const key = fixture.competition.trim().toLowerCase();
     if (key && !currentCompetitionNames.has(key)) currentCompetitionNames.set(key, fixture.competition.trim());
   });
@@ -373,7 +404,7 @@ export function getFixtureBatchPreview(
   const existingCompetitions = competitionPlan
     .filter((item) => item.existsInWorkspace)
     .map((item) => currentCompetitionNames.get(item.competition.trim().toLowerCase()) || item.competition);
-  const matchingFixtureCount = newFixtures.filter((fixture) => currentKeys.has(fixtureMatchKey(fixture))).length;
+  const matchingFixtureCount = dedupedNewFixtures.filter((fixture) => currentKeys.has(fixtureMatchKey(fixture))).length;
   const warnings: string[] = [];
   if (duplicateImportCount > 0) {
     warnings.push(`${duplicateImportCount} duplicate fixture row${duplicateImportCount === 1 ? "" : "s"} detected inside the import file.`);
@@ -382,7 +413,7 @@ export function getFixtureBatchPreview(
     warnings.push("Replace entire workspace will remove every current fixture before importing this file.");
   }
   if (mode === "append" && existingCompetitions.length > 0) {
-    warnings.push(`Append/Add New will add rows into existing competition scope: ${existingCompetitions.join(", ")}. Use Update or Replace imported competition only if you are refreshing that league.`);
+    warnings.push(`Append/Add New will skip exact duplicate fixtures and only add new rows into existing competition scope: ${existingCompetitions.join(", ")}. Use Update or Replace imported competition only if you are refreshing that league.`);
   }
   if (mode === "replaceCompetition") {
     if (existingCompetitions.length > 0) {
@@ -444,28 +475,39 @@ export function applyFixtureBatch(
   mode: FixtureBatchMode,
   scopeCompetitions?: string[]
 ): FixtureBatchApplyResult {
+  const dedupedNewFixtures = dedupeFixturesByMatchKey(newFixtures);
+  const dedupedCurrentFixtures = dedupeFixturesByMatchKey(currentFixtures);
+  const currentFixtureKeySet = new Set(dedupedCurrentFixtures.map(fixtureMatchKey));
+
   const baseResult = {
     replacedCompetitionCount: 0,
     updatedFixtureCount: 0,
-    addedFixtureCount: newFixtures.length,
-    preservedFixtureCount: currentFixtures.length,
+    addedFixtureCount: dedupedNewFixtures.length,
+    preservedFixtureCount: dedupedCurrentFixtures.length,
   };
 
   if (mode === "append") {
-    return { fixtures: [...newFixtures, ...currentFixtures], ...baseResult };
+    const fixturesToAdd = dedupedNewFixtures.filter((fixture) => !currentFixtureKeySet.has(fixtureMatchKey(fixture)));
+    return {
+      fixtures: [...fixturesToAdd, ...dedupedCurrentFixtures],
+      replacedCompetitionCount: 0,
+      updatedFixtureCount: 0,
+      addedFixtureCount: fixturesToAdd.length,
+      preservedFixtureCount: dedupedCurrentFixtures.length,
+    };
   }
 
   if (mode === "update") {
-    const currentByKey = new Map(currentFixtures.map((fixture) => [fixtureMatchKey(fixture), fixture]));
+    const currentByKey = new Map(dedupedCurrentFixtures.map((fixture) => [fixtureMatchKey(fixture), fixture]));
     const updatedIds = new Set<string>();
-    const updatedFixtures = newFixtures.map((fixture) => {
+    const updatedFixtures = dedupedNewFixtures.map((fixture) => {
       const existing = currentByKey.get(fixtureMatchKey(fixture));
       if (!existing) return fixture;
       updatedIds.add(existing.id);
       return { ...fixture, id: existing.id, betLog: existing.betLog ? { ...existing.betLog } : fixture.betLog };
     });
-    const importedKeys = new Set(newFixtures.map(fixtureMatchKey));
-    const preservedFixtures = currentFixtures.filter((fixture) => !importedKeys.has(fixtureMatchKey(fixture)));
+    const importedKeys = new Set(dedupedNewFixtures.map(fixtureMatchKey));
+    const preservedFixtures = dedupedCurrentFixtures.filter((fixture) => !importedKeys.has(fixtureMatchKey(fixture)));
     const finalFixtures = [...updatedFixtures, ...preservedFixtures];
     return {
       fixtures: finalFixtures,
@@ -477,25 +519,25 @@ export function applyFixtureBatch(
   }
 
   if (mode === "replaceCompetition") {
-    const competitionScope = getCompetitionScope(newFixtures, scopeCompetitions);
-    const preservedFixtures = currentFixtures.filter(
+    const competitionScope = getCompetitionScope(dedupedNewFixtures, scopeCompetitions);
+    const preservedFixtures = dedupedCurrentFixtures.filter(
       (fixture) => !competitionScope.has(fixture.competition.trim().toLowerCase()),
     );
-    const finalFixtures = [...newFixtures, ...preservedFixtures];
+    const finalFixtures = [...dedupedNewFixtures, ...preservedFixtures];
     return {
       fixtures: finalFixtures,
       replacedCompetitionCount: competitionScope.size,
       updatedFixtureCount: 0,
-      addedFixtureCount: newFixtures.length,
+      addedFixtureCount: dedupedNewFixtures.length,
       preservedFixtureCount: preservedFixtures.length,
     };
   }
 
   return {
-    fixtures: newFixtures,
+    fixtures: dedupedNewFixtures,
     replacedCompetitionCount: 0,
     updatedFixtureCount: 0,
-    addedFixtureCount: newFixtures.length,
+    addedFixtureCount: dedupedNewFixtures.length,
     preservedFixtureCount: 0,
   };
 }
