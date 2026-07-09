@@ -1,0 +1,14 @@
+{
+  "framework": "nextjs",
+  "installCommand": "npm ci --no-audit --no-fund --progress=false",
+  "buildCommand": "npm run verify",
+  "regions": [
+    "iad1"
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/fetch-fixtures",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}
