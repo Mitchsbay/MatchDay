@@ -26,7 +26,6 @@ import {
 } from "../lib/scoringEngine";
 import {
   applyFixtureBatch,
-  calculateTipPoints,
   cloneFixtures,
   createBlankFixture,
   createPersistedState,
@@ -302,16 +301,11 @@ function runWorkspaceSmokeTests() {
     getActualOutcomeFromScore({ status: "final", homeGoals: 1, awayGoals: 1 }),
     "draw",
   );
-  assert.equal(calculateTipPoints("draw", "draw"), 2);
-  assert.equal(calculateTipPoints("home", "away"), 0);
-
   const persisted = createPersistedState(
     [blank],
     blank.id,
     blank.round,
     defaultRuleWeights,
-    [],
-    [],
   );
   assert.equal(persisted.fixtures.length, 1);
   assert.equal(persisted.selectedRound, "Round 99");
@@ -392,80 +386,37 @@ function runFixtureAutomationSmokeTests() {
 function runWorkspaceBatchAndLiveFixturesSmokeTests() {
   const existingFixture = createBlankFixture("Round 1", "Sample League");
   const survivingFixture = { ...createBlankFixture("Round 2", "Sample League"), id: "keeps-this-one" };
-  const currentTips = [
-    { fixtureId: existingFixture.id, entrantId: "e1", pick: "home" as const, confidence: 60 },
-    { fixtureId: survivingFixture.id, entrantId: "e1", pick: "away" as const, confidence: 55 },
-  ];
 
-  const appended = applyFixtureBatch([survivingFixture], [existingFixture], currentTips, "append");
+  const appended = applyFixtureBatch([survivingFixture], [existingFixture], "append");
   assert.equal(appended.fixtures.length, 2, "append mode should keep existing fixtures plus new ones");
-  assert.equal(appended.tips.length, 2, "append mode should never touch existing tips");
-  assert.equal(appended.orphanedTipsCount, 0);
 
-  const replaced = applyFixtureBatch([survivingFixture], [existingFixture], currentTips, "replace");
+  const replaced = applyFixtureBatch([survivingFixture], [existingFixture], "replace");
   assert.equal(replaced.fixtures.length, 1, "replace mode should only keep the new fixtures");
-  assert.equal(replaced.tips.length, 1, "replace mode should drop tips pointing at removed fixtures");
-  assert.equal(replaced.tips[0].fixtureId, "keeps-this-one");
-  assert.equal(replaced.orphanedTipsCount, 1);
+  assert.equal(replaced.fixtures[0].id, "keeps-this-one");
 
   const otherCompetitionFixture = { ...createBlankFixture("Round 1", "Other League"), id: "other-league-fixture" };
   const sameCompetitionReplacement = { ...createBlankFixture("Round 3", "Sample League"), id: "new-sample-league-fixture" };
   const scoped = applyFixtureBatch(
     [sameCompetitionReplacement],
     [existingFixture, otherCompetitionFixture],
-    [
-      { fixtureId: existingFixture.id, entrantId: "e1", pick: "home" as const, confidence: 60 },
-      { fixtureId: otherCompetitionFixture.id, entrantId: "e1", pick: "away" as const, confidence: 55 },
-    ],
     "replaceCompetition",
   );
   assert.equal(scoped.fixtures.length, 2, "competition replace should preserve fixtures from other competitions");
   assert.ok(scoped.fixtures.some((fixture) => fixture.id === "other-league-fixture"));
   assert.ok(scoped.fixtures.some((fixture) => fixture.id === "new-sample-league-fixture"));
-  assert.equal(scoped.tips.length, 1, "competition replace should only orphan tips for the replaced competition");
-  assert.equal(scoped.tips[0].fixtureId, "other-league-fixture");
-  assert.equal(scoped.orphanedTipsCount, 1);
 
   const updateOriginal = { ...createBlankFixture("Round 4", "Update League"), id: "stable-tip-id", homeTeam: "Alpha", awayTeam: "Beta", date: "2026-08-01" };
   const updateIncoming = { ...updateOriginal, id: "incoming-different-id", scores: { ...updateOriginal.scores, homeAdvantage: 3 } };
   const updated = applyFixtureBatch(
     [updateIncoming],
     [updateOriginal, otherCompetitionFixture],
-    [{ fixtureId: "stable-tip-id", entrantId: "e1", pick: "home" as const, confidence: 70 }],
     "update",
   );
   const updatedFixture = updated.fixtures.find((fixture) => fixture.id === "stable-tip-id");
   assert.ok(updatedFixture, "update mode should preserve the existing fixture id for matching rows");
   assert.equal(updatedFixture?.scores.homeAdvantage, 3, "update mode should apply incoming fixture data");
-  assert.equal(updated.tips.length, 1, "update mode should preserve tips for matched fixtures");
   assert.equal(updated.updatedFixtureCount, 1);
-
-  const row: LiveFixtureRow = {
-    id: "12345",
-    competition: "Premier League",
-    competition_code: "PL",
-    round: "Matchday 10",
-    match_date: "2026-11-01T15:00:00Z",
-    home_team: "Arsenal",
-    away_team: "Chelsea",
-    home_stats: { ...createBlankFixture("Round 1").homeStats, points: 25, played: 10 },
-    away_stats: { ...createBlankFixture("Round 1").awayStats, points: 18, played: 10 },
-    home_recent_form: [{ result: "W", goalsFor: 2, goalsAgainst: 0 }],
-    away_recent_form: [{ result: "D", goalsFor: 1, goalsAgainst: 1 }],
-  };
-  const mapped = mapLiveFixtureRow(row);
-  assert.equal(mapped.id, "12345");
-  assert.equal(mapped.homeTeam, "Arsenal");
-  assert.equal(mapped.awayTeam, "Chelsea");
-  assert.equal(mapped.homeStats.points, 25);
-  assert.equal(mapped.homeRecentForm[0].result, "W");
-  // Fields football-data.org has no source for should fall back to blank
-  // defaults, same as a CSV-imported or generated fixture.
-  assert.equal(mapped.oddsMarket.homeWinProbability, createBlankFixture("x").oddsMarket.homeWinProbability);
-  assert.equal(mapped.matchResult.status, "pending");
-  assert.equal(mapped.homeMissingPlayers.length, createBlankFixture("x").homeMissingPlayers.length);
 }
-
 
 function runEvidenceAuditSmokeTests() {
   const strongSample = auditFixtureEvidence(fixtures[0]);
@@ -808,9 +759,6 @@ function runCustomCompetitionImportSmokeTests() {
 
 function runImportPreviewSmokeTests() {
   const current = cloneFixtures(fixtures).slice(0, 2);
-  const tips = [
-    { entrantId: "entrant-preview", fixtureId: current[0].id, pick: "home" as const, confidence: 70 },
-  ];
   const replacement = {
     ...current[0],
     id: "custom-preview-updated",
@@ -823,30 +771,27 @@ function runImportPreviewSmokeTests() {
   newFixture.homeTeam = "Preview Home";
   newFixture.awayTeam = "Preview Away";
 
-  const updatePreview = getFixtureBatchPreview([replacement, newFixture], current, tips, "update");
+  const updatePreview = getFixtureBatchPreview([replacement, newFixture], current, "update");
   assert.equal(updatePreview.importedFixtureCount, 2);
   assert.equal(updatePreview.matchingFixtureCount, 1);
   assert.equal(updatePreview.updatedFixtureCount, 1);
   assert.equal(updatePreview.addedFixtureCount, 1);
-  assert.equal(updatePreview.orphanedTipsCount, 0);
   assert.equal(updatePreview.finalFixtureCount, 3);
 
-  const replacePreview = getFixtureBatchPreview([newFixture], current, tips, "replaceCompetition", [newFixture.competition]);
+  const replacePreview = getFixtureBatchPreview([newFixture], current, "replaceCompetition", [newFixture.competition]);
   assert.equal(replacePreview.replacedCompetitionCount, 1);
-  assert.equal(replacePreview.orphanedTipsCount, 1);
-  assert.ok(replacePreview.warnings.some((warning) => warning.includes("orphaned")));
 
-  const duplicatePreview = getFixtureBatchPreview([newFixture, { ...newFixture, id: "dupe" }], current, tips, "append");
+  const duplicatePreview = getFixtureBatchPreview([newFixture, { ...newFixture, id: "dupe" }], current, "append");
   assert.equal(duplicatePreview.duplicateImportCount, 1);
 
   const brandNewCompetitionFixture = createBlankFixture("Round 1", "USL Championship");
   brandNewCompetitionFixture.id = "usl-new-import";
-  const addNewPreview = getFixtureBatchPreview([brandNewCompetitionFixture], current, tips, "append");
+  const addNewPreview = getFixtureBatchPreview([brandNewCompetitionFixture], current, "append");
   assert.deepEqual(addNewPreview.newCompetitions, ["usl championship"]);
   assert.deepEqual(addNewPreview.existingCompetitions, []);
   assert.ok(addNewPreview.summaryLines.some((line) => line.includes("New competition")));
 
-  const existingCompetitionPreview = getFixtureBatchPreview([newFixture], current, tips, "append");
+  const existingCompetitionPreview = getFixtureBatchPreview([newFixture], current, "append");
   assert.equal(existingCompetitionPreview.newCompetitions.length, 0);
   assert.ok(existingCompetitionPreview.existingCompetitions.length > 0);
   assert.ok(existingCompetitionPreview.warnings.some((warning) => warning.includes("existing competition scope")));
@@ -1397,7 +1342,6 @@ function runCompetitionDataQualitySmokeTests() {
 
   const summary = summariseCompetitionDataQuality(
     [duplicate, duplicateCopy, missing],
-    [{ fixtureId: "removed-fixture", entrantId: "entrant", pick: "home", confidence: 60 }],
     "Quality League",
   );
 
@@ -1405,7 +1349,6 @@ function runCompetitionDataQualitySmokeTests() {
   assert.equal(summary.finalResults, 2);
   assert.ok(summary.duplicateFixtureRows >= 2, "duplicate fixture rows should be flagged");
   assert.ok(summary.possibleTeamNameVariants >= 1, "accent variants should be flagged");
-  assert.equal(summary.orphanedTips, 1);
   assert.equal(summary.status, "needs-work");
   assert.ok(summary.issues.some((issue) => issue.category === "Fixture teams"));
 }
@@ -1423,22 +1366,12 @@ function runWorkspacePreservationSmokeTests() {
     fixtures[0].id,
     "Round 1",
     defaultRuleWeights,
-    [],
-    [],
-    [],
-    [],
-    [],
   );
   const richer = createPersistedState(
     richFixtures,
     richFixtures[0].id,
     "Round 1",
     defaultRuleWeights,
-    [{ id: "entrant-a", name: "Entrant A" }],
-    [{ fixtureId: extraFixture.id, entrantId: "entrant-a", pick: "home", confidence: 75 }],
-    [],
-    [],
-    [],
   );
 
   assert.equal(shouldBlockWeakerWorkspaceOverwrite(weaker, richer), true);
@@ -1451,22 +1384,12 @@ function runWorkspaceRecoveryVaultSmokeTests() {
     fixtures[0].id,
     "Round 1",
     defaultRuleWeights,
-    [{ id: "entrant-a", name: "Entrant A" }],
-    [],
-    [],
-    [],
-    [],
   );
   const richerState = createPersistedState(
     fixtures.slice(0, 4),
     fixtures[0].id,
     "Round 1",
     defaultRuleWeights,
-    [{ id: "entrant-a", name: "Entrant A" }],
-    [{ fixtureId: fixtures[0].id, entrantId: "entrant-a", pick: "home", confidence: 70 }],
-    [],
-    [],
-    [],
   );
 
   const automatic = createWorkspaceRecoverySnapshot(baseState, "Automatic", "automatic");
@@ -1487,11 +1410,6 @@ function runWorkspaceRecoveryVaultSmokeTests() {
         fixtures[0].id,
         "Round 1",
         defaultRuleWeights,
-        [],
-        [],
-        [],
-        [],
-        [],
       ),
       `Automatic ${index}`,
       "automatic",
@@ -1504,7 +1422,7 @@ function runWorkspaceRecoveryVaultSmokeTests() {
   // what keeps a snapshot's own embedded state from recursively containing
   // a copy of the vault it's itself a member of.
   const stateWithoutVaultArg = createPersistedState(
-    fixtures.slice(0, 1), fixtures[0].id, "Round 1", defaultRuleWeights, [], [], [], [], [],
+    fixtures.slice(0, 1), fixtures[0].id, "Round 1", defaultRuleWeights,
   );
   assert.deepEqual(stateWithoutVaultArg.recoverySnapshots, []);
 
@@ -1512,7 +1430,7 @@ function runWorkspaceRecoveryVaultSmokeTests() {
   // path) should actually carry it, proving the field isn't silently dropped.
   const someSnapshot = createWorkspaceRecoverySnapshot(baseState, "Manual", "manual");
   const stateWithVaultArg = createPersistedState(
-    fixtures.slice(0, 1), fixtures[0].id, "Round 1", defaultRuleWeights, [], [], [], [], [], defaultAdvancedDataWeightControls, [someSnapshot],
+    fixtures.slice(0, 1), fixtures[0].id, "Round 1", defaultRuleWeights, [], [], [], defaultAdvancedDataWeightControls, [someSnapshot],
   );
   assert.equal(stateWithVaultArg.recoverySnapshots?.length, 1);
   assert.equal(stateWithVaultArg.recoverySnapshots?.[0].id, someSnapshot.id);
@@ -1535,22 +1453,12 @@ function runWorkspaceRestoreResolverSmokeTests() {
     fixtures[0].id,
     "Round 1",
     defaultRuleWeights,
-    [],
-    [],
-    [],
-    [],
-    [],
   );
   const cloudState = createPersistedState(
     fixtures,
     fixtures[0].id,
     "Round 1",
     defaultRuleWeights,
-    [],
-    [],
-    [],
-    [],
-    [],
   );
   const recovery = createWorkspaceRecoverySnapshot(cloudState, "Rich cloud-era backup", "manual");
   const resolver = buildWorkspaceRestoreResolverSummary({
@@ -1940,15 +1848,14 @@ function runReleaseChecklistSmokeTests() {
   const summary = buildReleaseChecklist({
     fixtureCount: fixtures.length,
     competitionCount: getCompetitionNames(fixtures).length,
-    entrantCount: 3,
     aliasRuleCount: 5,
     tuningPresetCount: 2,
     modelChangeLogCount: 1,
     hasSupabaseConfig: false,
   });
 
-  assert.equal(summary.version, "0.47.3");
-  assert.equal(summary.patch, "P47.3");
+  assert.equal(summary.version, "0.47.4");
+  assert.equal(summary.patch, "P47.4");
   assert.ok(summary.deploymentItems.some((item) => item.id === "lockfile" && item.status === "pass"));
   assert.ok(summary.deploymentItems.some((item) => item.id === "supabase" && item.status === "warn"));
   assert.equal(summary.standingItems.length, 4);

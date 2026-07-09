@@ -1,9 +1,4 @@
-import {
-  Entrant,
-  Fixture,
-  TipPick,
-  UserTip,
-} from "./sampleData";
+import { Fixture, TipPick } from "./sampleData";
 import { cloneTeamAliases, TeamAliasRule } from "./teamAliases";
 import { cloneAdvancedEvidence } from "./advancedEvidence";
 import { cloneTuningPresets, TuningPreset } from "./tuningPresets";
@@ -30,8 +25,9 @@ import {
 
 export const ALL_ROUNDS = "__all_rounds__";
 
-export const STORAGE_KEY = "tipping-gates-app-p47-2-state-v1";
+export const STORAGE_KEY = "tipping-gates-app-p47-4-state-v1";
 export const LEGACY_STORAGE_KEYS = [
+  "tipping-gates-app-p47-2-state-v1",
   "tipping-gates-app-p47-state-v1",
   "tipping-gates-app-p46-state-v1",
   "tipping-gates-app-p44-state-v1",
@@ -69,8 +65,9 @@ export const LEGACY_STORAGE_KEYS = [
   "tipping-gates-app-p12-state-v1",
   "tipping-gates-app-p11-state-v1",
 ];
-export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p47-2-cloud-workspace-id";
+export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p47-4-cloud-workspace-id";
 export const LEGACY_CLOUD_WORKSPACE_ID_KEYS = [
+  "tipping-gates-app-p47-2-cloud-workspace-id",
   "tipping-gates-app-p47-cloud-workspace-id",
   "tipping-gates-app-p46-cloud-workspace-id",
   "tipping-gates-app-p44-cloud-workspace-id",
@@ -116,8 +113,6 @@ export type PersistedAppState = {
   activeFixtureId: string;
   selectedRound?: string;
   ruleWeights: RuleWeights;
-  entrants?: Entrant[];
-  userTips?: UserTip[];
   teamAliases?: TeamAliasRule[];
   tuningPresets?: TuningPreset[];
   modelChangeLog?: ModelChangeLogEntry[];
@@ -159,14 +154,6 @@ export function cloneFixtures(fixtures: Fixture[]): Fixture[] {
     advancedEvidence: cloneAdvancedEvidence(fixture.advancedEvidence),
     betLog: fixture.betLog ? { ...fixture.betLog } : undefined,
   }));
-}
-
-export function cloneEntrants(entrants: Entrant[]): Entrant[] {
-  return entrants.map((entrant) => ({ ...entrant }));
-}
-
-export function cloneUserTips(userTips: UserTip[]): UserTip[] {
-  return userTips.map((tip) => ({ ...tip }));
 }
 
 export function isPersistedAppState(value: unknown): value is PersistedAppState {
@@ -249,8 +236,6 @@ export function createPersistedState(
   activeFixtureId: string,
   selectedRound: string,
   ruleWeights: RuleWeights,
-  entrants: Entrant[],
-  userTips: UserTip[],
   teamAliases: TeamAliasRule[] = [],
   tuningPresets: TuningPreset[] = [],
   modelChangeLog: ModelChangeLogEntry[] = [],
@@ -264,14 +249,12 @@ export function createPersistedState(
   recoverySnapshots: WorkspaceRecoverySnapshot[] = [],
 ): PersistedAppState {
   return {
-    version: "0.47.2",
+    version: "0.47.4",
     savedAt: new Date().toISOString(),
     fixtures: cloneFixtures(fixtures),
     activeFixtureId,
     selectedRound,
     ruleWeights: { ...ruleWeights },
-    entrants: cloneEntrants(entrants),
-    userTips: cloneUserTips(userTips),
     teamAliases: cloneTeamAliases(teamAliases),
     tuningPresets: cloneTuningPresets(tuningPresets),
     modelChangeLog: cloneModelChangeLog(modelChangeLog),
@@ -313,8 +296,6 @@ export type FixtureBatchCompetitionPlan = {
 
 export type FixtureBatchApplyResult = {
   fixtures: Fixture[];
-  tips: UserTip[];
-  orphanedTipsCount: number;
   replacedCompetitionCount: number;
   updatedFixtureCount: number;
   addedFixtureCount: number;
@@ -335,8 +316,6 @@ export type FixtureBatchPreview = {
   addedFixtureCount: number;
   preservedFixtureCount: number;
   replacedCompetitionCount: number;
-  orphanedTipsCount: number;
-  tipsPreservedCount: number;
   currentFixtureCount: number;
   finalFixtureCount: number;
   summaryLines: string[];
@@ -358,21 +337,14 @@ function getCompetitionScope(newFixtures: Fixture[], requestedScope?: string[]):
   return new Set(source.map((competition) => competition.trim().toLowerCase()).filter(Boolean));
 }
 
-function filterTipsForFixtures(tips: UserTip[], fixtures: Fixture[]) {
-  const survivingIds = new Set(fixtures.map((fixture) => fixture.id));
-  const keptTips = tips.filter((tip) => survivingIds.has(tip.fixtureId));
-  return { keptTips, orphanedTipsCount: tips.length - keptTips.length };
-}
-
 
 export function getFixtureBatchPreview(
   newFixtures: Fixture[],
   currentFixtures: Fixture[],
-  currentTips: UserTip[],
   mode: FixtureBatchMode,
   scopeCompetitions?: string[]
 ): FixtureBatchPreview {
-  const applied = applyFixtureBatch(newFixtures, currentFixtures, currentTips, mode, scopeCompetitions);
+  const applied = applyFixtureBatch(newFixtures, currentFixtures, mode, scopeCompetitions);
   const importedCompetitions = Array.from(
     getCompetitionScope(newFixtures, scopeCompetitions)
   ).sort();
@@ -420,9 +392,6 @@ export function getFixtureBatchPreview(
       warnings.push(`No existing competition found for ${newCompetitions.join(", ")}; this mode will add it without replacing other competitions.`);
     }
   }
-  if (applied.orphanedTipsCount > 0) {
-    warnings.push(`${applied.orphanedTipsCount} existing tip${applied.orphanedTipsCount === 1 ? "" : "s"} would be orphaned by this import mode.`);
-  }
 
   const modeLabel: Record<FixtureBatchMode, string> = {
     append: "Append",
@@ -445,8 +414,6 @@ export function getFixtureBatchPreview(
     addedFixtureCount: applied.addedFixtureCount,
     preservedFixtureCount: applied.preservedFixtureCount,
     replacedCompetitionCount: applied.replacedCompetitionCount,
-    orphanedTipsCount: applied.orphanedTipsCount,
-    tipsPreservedCount: applied.tips.length,
     currentFixtureCount: currentFixtures.length,
     finalFixtureCount: applied.fixtures.length,
     warnings,
@@ -461,21 +428,19 @@ export function getFixtureBatchPreview(
         : "No existing competitions will be touched by competition name.",
       `Will update ${applied.updatedFixtureCount} matching fixture${applied.updatedFixtureCount === 1 ? "" : "s"}, add ${applied.addedFixtureCount} new fixture${applied.addedFixtureCount === 1 ? "" : "s"}, and preserve ${applied.preservedFixtureCount} existing fixture${applied.preservedFixtureCount === 1 ? "" : "s"}.`,
       `Workspace fixture count will change from ${currentFixtures.length} to ${applied.fixtures.length}.`,
-      `Tips preserved: ${applied.tips.length}; tips at risk: ${applied.orphanedTipsCount}.`,
     ],
   };
 }
 
 // Shared by every fixture-batch entry point (CSV import, custom competition import,
 // round-robin generator, live fixture fetch).
-// - append: prepends imported fixtures and leaves existing workspace fixtures/tips alone.
-// - replace: swaps the entire fixture workspace and drops tips whose fixtures disappear.
+// - append: prepends imported fixtures and leaves existing workspace fixtures alone.
+// - replace: swaps the entire fixture workspace.
 // - replaceCompetition: replaces only competitions present in the import/scope.
-// - update: updates matching fixtures in place, preserving existing IDs/tips, and adds new fixtures.
+// - update: updates matching fixtures in place, preserving existing IDs, and adds new fixtures.
 export function applyFixtureBatch(
   newFixtures: Fixture[],
   currentFixtures: Fixture[],
-  currentTips: UserTip[],
   mode: FixtureBatchMode,
   scopeCompetitions?: string[]
 ): FixtureBatchApplyResult {
@@ -487,7 +452,7 @@ export function applyFixtureBatch(
   };
 
   if (mode === "append") {
-    return { fixtures: [...newFixtures, ...currentFixtures], tips: currentTips, orphanedTipsCount: 0, ...baseResult };
+    return { fixtures: [...newFixtures, ...currentFixtures], ...baseResult };
   }
 
   if (mode === "update") {
@@ -502,11 +467,8 @@ export function applyFixtureBatch(
     const importedKeys = new Set(newFixtures.map(fixtureMatchKey));
     const preservedFixtures = currentFixtures.filter((fixture) => !importedKeys.has(fixtureMatchKey(fixture)));
     const finalFixtures = [...updatedFixtures, ...preservedFixtures];
-    const { keptTips, orphanedTipsCount } = filterTipsForFixtures(currentTips, finalFixtures);
     return {
       fixtures: finalFixtures,
-      tips: keptTips,
-      orphanedTipsCount,
       replacedCompetitionCount: 0,
       updatedFixtureCount: updatedIds.size,
       addedFixtureCount: updatedFixtures.length - updatedIds.size,
@@ -520,11 +482,8 @@ export function applyFixtureBatch(
       (fixture) => !competitionScope.has(fixture.competition.trim().toLowerCase()),
     );
     const finalFixtures = [...newFixtures, ...preservedFixtures];
-    const { keptTips, orphanedTipsCount } = filterTipsForFixtures(currentTips, finalFixtures);
     return {
       fixtures: finalFixtures,
-      tips: keptTips,
-      orphanedTipsCount,
       replacedCompetitionCount: competitionScope.size,
       updatedFixtureCount: 0,
       addedFixtureCount: newFixtures.length,
@@ -532,11 +491,8 @@ export function applyFixtureBatch(
     };
   }
 
-  const { keptTips, orphanedTipsCount } = filterTipsForFixtures(currentTips, newFixtures);
   return {
     fixtures: newFixtures,
-    tips: keptTips,
-    orphanedTipsCount,
     replacedCompetitionCount: 0,
     updatedFixtureCount: 0,
     addedFixtureCount: newFixtures.length,
@@ -551,12 +507,3 @@ export function getActualOutcomeFromScore(matchResult: MatchResultInput): TipPic
   return "draw";
 }
 
-export function getTipFor(userTips: UserTip[], fixtureId: string, entrantId: string): UserTip | undefined {
-  return userTips.find((tip) => tip.fixtureId === fixtureId && tip.entrantId === entrantId);
-}
-
-export function calculateTipPoints(pick: TipPick | undefined, actualOutcome: TipPick | "pending") {
-  if (!pick || actualOutcome === "pending") return 0;
-  if (pick !== actualOutcome) return 0;
-  return actualOutcome === "draw" ? 2 : 1;
-}

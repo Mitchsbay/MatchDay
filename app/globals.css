@@ -174,13 +174,6 @@ h1 { font-size: clamp(32px, 5vw, 56px); margin: 0 0 10px; line-height: 1.02; }
 .file-action input { display: none; }
 .secondary.danger { border-color: rgba(239,68,68,.45); color: #fca5a5; }
 
-.leaderboard-table, .entrant-list { display: grid; gap: 8px; margin-top: 14px; }
-.leaderboard-row { display: grid; grid-template-columns: .45fr 1.4fr .65fr .75fr .75fr .65fr .75fr; gap: 10px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: rgba(31,41,55,.45); color: var(--muted); font-size: 13px; }
-.leaderboard-row span:nth-child(2), .leaderboard-row span:nth-child(3) { color: var(--text); font-weight: 800; }
-.leaderboard-row.header-row { color: var(--text); font-weight: 800; background: rgba(14,165,233,.12); }
-.entrant-row { display: grid; grid-template-columns: 1.2fr .8fr 82px .6fr; gap: 10px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: rgba(31,41,55,.45); }
-.entrant-row select { width: 100%; padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: #020617; color: var(--text); }
-@media (max-width: 900px) { .leaderboard-row, .entrant-row { grid-template-columns: 1fr; } }
 
 .round-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-top: 14px; }
 .round-card { text-align: left; border: 1px solid var(--border); border-radius: 16px; padding: 14px; background: rgba(31,41,55,.45); color: var(--text); cursor: pointer; }

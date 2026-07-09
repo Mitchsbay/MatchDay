@@ -4,8 +4,6 @@ export type WorkspacePreservationMetrics = {
   fixtureCount: number;
   competitionCount: number;
   finalFixtureCount: number;
-  userTipCount: number;
-  entrantCount: number;
   aliasCount: number;
   tuningPresetCount: number;
   modelChangeLogCount: number;
@@ -23,8 +21,6 @@ export function getWorkspacePreservationMetrics(state: PersistedAppState): Works
     state.fixtures.map((fixture) => fixture.competition.trim()).filter(Boolean),
   );
   const finalFixtureCount = state.fixtures.filter((fixture) => fixture.matchResult.status === "final").length;
-  const userTipCount = state.userTips?.length ?? 0;
-  const entrantCount = state.entrants?.length ?? 0;
   const aliasCount = state.teamAliases?.length ?? 0;
   const tuningPresetCount = state.tuningPresets?.length ?? 0;
   const modelChangeLogCount = state.modelChangeLog?.length ?? 0;
@@ -34,8 +30,6 @@ export function getWorkspacePreservationMetrics(state: PersistedAppState): Works
     fixtureCount: state.fixtures.length,
     competitionCount: competitions.size,
     finalFixtureCount,
-    userTipCount,
-    entrantCount,
     aliasCount,
     tuningPresetCount,
     modelChangeLogCount,
@@ -44,8 +38,6 @@ export function getWorkspacePreservationMetrics(state: PersistedAppState): Works
       state.fixtures.length * 100 +
       competitions.size * 150 +
       finalFixtureCount * 40 +
-      userTipCount * 20 +
-      entrantCount * 5 +
       aliasCount * 5 +
       tuningPresetCount * 25 +
       modelChangeLogCount * 15 +
@@ -54,7 +46,7 @@ export function getWorkspacePreservationMetrics(state: PersistedAppState): Works
 }
 
 export function describeWorkspaceMetrics(metrics: WorkspacePreservationMetrics): string {
-  return `${metrics.fixtureCount} fixtures, ${metrics.competitionCount} competitions, ${metrics.userTipCount} tips, ${metrics.tuningPresetCount} presets, ${metrics.modelChangeLogCount} model-log entries`;
+  return `${metrics.fixtureCount} fixtures, ${metrics.competitionCount} competitions, ${metrics.tuningPresetCount} presets, ${metrics.modelChangeLogCount} model-log entries`;
 }
 
 export function shouldBlockWeakerWorkspaceOverwrite(incoming: PersistedAppState, existing: PersistedAppState): boolean {
@@ -66,11 +58,7 @@ export function shouldBlockWeakerWorkspaceOverwrite(incoming: PersistedAppState,
 
   const fixtureDrop = existingMetrics.fixtureCount - incomingMetrics.fixtureCount;
   const competitionDrop = existingMetrics.competitionCount - incomingMetrics.competitionCount;
-  const tipDrop = existingMetrics.userTipCount - incomingMetrics.userTipCount;
-
   if (fixtureDrop >= 2 && competitionDrop >= 1) return true;
-  if (competitionDrop >= 1 && tipDrop > 0) return true;
-
   return incomingMetrics.richnessScore + 150 < existingMetrics.richnessScore;
 }
 

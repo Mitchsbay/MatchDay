@@ -1,14 +1,7 @@
 "use client";
 
 import { ChangeEvent, Dispatch, SetStateAction, useEffect, useState } from "react";
-import {
-  Entrant,
-  Fixture,
-  UserTip,
-  entrants as initialEntrants,
-  fixtures as initialFixtures,
-  userTips as initialUserTips,
-} from "../lib/sampleData";
+import { Fixture, fixtures as initialFixtures } from "../lib/sampleData";
 import { RuleWeights, defaultRuleWeights } from "../lib/scoringEngine";
 import { DEFAULT_TEAM_ALIAS_RULES, TeamAliasRule, cloneTeamAliases, isTeamAliasRuleArray } from "../lib/teamAliases";
 import { TuningPreset, cloneTuningPresets, isTuningPresetArray } from "../lib/tuningPresets";
@@ -18,9 +11,7 @@ import {
   ALL_ROUNDS,
   LEGACY_STORAGE_KEYS,
   STORAGE_KEY,
-  cloneEntrants,
   cloneFixtures,
-  cloneUserTips,
   createPersistedState,
   discoverLocalWorkspaceCandidates,
   selectBestLocalWorkspaceCandidate,
@@ -45,8 +36,6 @@ type WorkspaceAutosaveArgs = {
   activeFixtureId: string;
   selectedRound: string;
   ruleWeights: RuleWeights;
-  entrants: Entrant[];
-  userTips: UserTip[];
   teamAliases: TeamAliasRule[];
   tuningPresets: TuningPreset[];
   modelChangeLog: ModelChangeLogEntry[];
@@ -55,8 +44,6 @@ type WorkspaceAutosaveArgs = {
   setActiveFixtureId: Dispatch<SetStateAction<string>>;
   setSelectedRound: Dispatch<SetStateAction<string>>;
   setRuleWeights: Dispatch<SetStateAction<RuleWeights>>;
-  setEntrants: Dispatch<SetStateAction<Entrant[]>>;
-  setUserTips: Dispatch<SetStateAction<UserTip[]>>;
   setTeamAliases: Dispatch<SetStateAction<TeamAliasRule[]>>;
   setTuningPresets: Dispatch<SetStateAction<TuningPreset[]>>;
   setModelChangeLog: Dispatch<SetStateAction<ModelChangeLogEntry[]>>;
@@ -68,8 +55,6 @@ export function useWorkspaceAutosave({
   activeFixtureId,
   selectedRound,
   ruleWeights,
-  entrants,
-  userTips,
   teamAliases,
   tuningPresets,
   modelChangeLog,
@@ -78,8 +63,6 @@ export function useWorkspaceAutosave({
   setActiveFixtureId,
   setSelectedRound,
   setRuleWeights,
-  setEntrants,
-  setUserTips,
   setTeamAliases,
   setTuningPresets,
   setModelChangeLog,
@@ -98,8 +81,6 @@ export function useWorkspaceAutosave({
       activeFixtureId,
       selectedRound,
       ruleWeights,
-      entrants,
-      userTips,
       teamAliases,
       tuningPresets,
       modelChangeLog,
@@ -130,8 +111,6 @@ export function useWorkspaceAutosave({
         : ALL_ROUNDS,
     );
     setRuleWeights({ ...defaultRuleWeights, ...parsedState.ruleWeights });
-    setEntrants(parsedState.entrants ? cloneEntrants(parsedState.entrants) : cloneEntrants(initialEntrants));
-    setUserTips(parsedState.userTips ? cloneUserTips(parsedState.userTips) : cloneUserTips(initialUserTips));
     setTeamAliases(isTeamAliasRuleArray(parsedState.teamAliases) ? cloneTeamAliases(parsedState.teamAliases) : cloneTeamAliases(DEFAULT_TEAM_ALIAS_RULES));
     setTuningPresets(isTuningPresetArray(parsedState.tuningPresets) ? cloneTuningPresets(parsedState.tuningPresets) : []);
     setModelChangeLog(isModelChangeLogArray(parsedState.modelChangeLog) ? cloneModelChangeLog(parsedState.modelChangeLog) : []);
@@ -162,7 +141,7 @@ export function useWorkspaceAutosave({
     } finally {
       setHasLoadedSavedState(true);
     }
-  }, [setActiveFixtureId, setEntrants, setFixtures, setRuleWeights, setSelectedRound, setUserTips, setTeamAliases, setTuningPresets, setModelChangeLog, setAdvancedDataControls]);
+  }, [setActiveFixtureId, setFixtures, setRuleWeights, setSelectedRound, setTeamAliases, setTuningPresets, setModelChangeLog, setAdvancedDataControls]);
 
   useEffect(() => {
     if (!hasLoadedSavedState) return;
@@ -172,8 +151,6 @@ export function useWorkspaceAutosave({
         activeFixtureId,
         selectedRound,
         ruleWeights,
-        entrants,
-        userTips,
         teamAliases,
         tuningPresets,
         modelChangeLog,
@@ -198,7 +175,7 @@ export function useWorkspaceAutosave({
     } catch {
       setStorageMessage("Autosave failed. Export a backup before refreshing.");
     }
-  }, [fixtures, activeFixtureId, selectedRound, ruleWeights, entrants, userTips, teamAliases, tuningPresets, modelChangeLog, advancedDataControls, hasLoadedSavedState, recoverySnapshots]);
+  }, [fixtures, activeFixtureId, selectedRound, ruleWeights, teamAliases, tuningPresets, modelChangeLog, advancedDataControls, hasLoadedSavedState, recoverySnapshots]);
 
   function resetWorkspaceToSamples() {
     try {
@@ -212,8 +189,6 @@ export function useWorkspaceAutosave({
     setActiveFixtureId(nextFixtures[0]?.id ?? "");
     setSelectedRound(ALL_ROUNDS);
     setRuleWeights({ ...defaultRuleWeights });
-    setEntrants(cloneEntrants(initialEntrants));
-    setUserTips(cloneUserTips(initialUserTips));
     setTeamAliases(cloneTeamAliases(DEFAULT_TEAM_ALIAS_RULES));
     setTuningPresets([]);
     setModelChangeLog([]);
@@ -223,7 +198,7 @@ export function useWorkspaceAutosave({
   }
 
   function exportWorkspaceBackup() {
-    const baseState = createPersistedState(fixtures, activeFixtureId, selectedRound, ruleWeights, entrants, userTips, teamAliases, tuningPresets, modelChangeLog, advancedDataControls);
+    const baseState = createPersistedState(fixtures, activeFixtureId, selectedRound, ruleWeights, teamAliases, tuningPresets, modelChangeLog, advancedDataControls);
     const state: typeof baseState = { ...baseState, recoverySnapshots };
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);

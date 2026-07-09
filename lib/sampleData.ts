@@ -12,18 +12,6 @@ import type {
 
 export type TipPick = "home" | "draw" | "away";
 
-export type Entrant = {
-  id: string;
-  name: string;
-};
-
-export type UserTip = {
-  fixtureId: string;
-  entrantId: string;
-  pick: TipPick;
-  confidence: number;
-};
-
 export type FixtureBetLog = {
   outcomeBacked: TipPick;
   odds: string;
@@ -509,21 +497,3 @@ export const fixtures: Fixture[] = [
   },
 ];
 
-
-export const entrants: Entrant[] = [
-  { id: "mitchel", name: "Mitchel" },
-  { id: "james", name: "James" },
-  { id: "sam", name: "Sam" },
-];
-
-export const userTips: UserTip[] = [
-  { fixtureId: "ars-cov", entrantId: "mitchel", pick: "home", confidence: 85 },
-  { fixtureId: "ars-cov", entrantId: "james", pick: "home", confidence: 78 },
-  { fixtureId: "ars-cov", entrantId: "sam", pick: "draw", confidence: 35 },
-  { fixtureId: "eve-wol", entrantId: "mitchel", pick: "home", confidence: 55 },
-  { fixtureId: "eve-wol", entrantId: "james", pick: "draw", confidence: 50 },
-  { fixtureId: "eve-wol", entrantId: "sam", pick: "away", confidence: 52 },
-  { fixtureId: "bre-ful", entrantId: "mitchel", pick: "draw", confidence: 48 },
-  { fixtureId: "bre-ful", entrantId: "james", pick: "home", confidence: 51 },
-  { fixtureId: "bre-ful", entrantId: "sam", pick: "draw", confidence: 60 },
-];

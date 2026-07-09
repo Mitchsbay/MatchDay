@@ -1,6 +1,5 @@
 "use client";
 
-import type { Entrant } from "../lib/sampleData";
 import type { EvidenceAuditSummary, FixtureEvidenceAudit } from "../lib/evidenceAudit";
 import type { RuleWeights } from "../lib/scoringEngine";
 import type { CompetitionInsights } from "../lib/competitionInsights";
@@ -16,7 +15,6 @@ import { getPresetWeightChangeCount } from "../lib/tuningPresets";
 import { ruleWeightDefinitions } from "../lib/scoringEngine";
 import { signed } from "../lib/uiFormat";
 
-type LeaderboardEntry = Entrant & { submitted: number; settled: number; correct: number; pending: number; points: number; hitRate: number; averageConfidence: number };
 
 function auditStatusBadge(status: FixtureEvidenceAudit["status"]) {
   if (status === "ready") return <span className="badge good">Ready</span>;
@@ -75,10 +73,7 @@ function StandingsTable(props: { rows: CompetitionInsights["resultStandings"]; e
 }
 
 export function CompetitionInsightsPanel(props: {
-  competitionNames: string[];
-  selectedCompetition: string;
   insights: CompetitionInsights;
-  onCompetitionChange: (competition: string) => void;
 }) {
   const { insights } = props;
   return (
@@ -87,14 +82,6 @@ export function CompetitionInsightsPanel(props: {
       <p className="section-help">
         Review the imported competition before trusting predictions. The results-derived table is calculated from final fixture scores in the workspace; the imported evidence table shows the latest team-stat snapshot supplied by your Teams sheet or fixture evidence.
       </p>
-      <label>
-        Competition
-        <select value={props.selectedCompetition} onChange={(event) => props.onCompetitionChange(event.target.value)}>
-          {props.competitionNames.map((competition) => (
-            <option key={competition} value={competition}>{competition}</option>
-          ))}
-        </select>
-      </label>
       <div className="result-grid compact" style={{ marginTop: 12 }}>
         <div className="metric"><div className="label">Fixtures</div><div className="value">{insights.fixtureCount}</div></div>
         <div className="metric"><div className="label">Final results</div><div className="value">{insights.finalResultCount}</div></div>
@@ -153,7 +140,7 @@ export function CompetitionDataQualityPanel(props: { summary: CompetitionDataQua
     <section className="card" style={{ marginBottom: 18 }}>
       <h3>P37 Competition Data Quality Dashboard</h3>
       <p className="section-help">
-        Checks the selected competition for data-quality problems before you trust the predictions or run weekly updates. This panel is read-only and does not change fixtures, tips, aliases, tennis, probabilities, or model weights.
+        Checks the selected competition for data-quality problems before you trust the predictions or run weekly updates. This panel is read-only and does not change fixtures, aliases, tennis, probabilities, or model weights.
       </p>
       <div className="result-grid compact">
         <div className="metric"><div className="label">Competition</div><div className="value small-value">{summary.competition || "—"}</div></div>
@@ -170,7 +157,7 @@ export function CompetitionDataQualityPanel(props: { summary: CompetitionDataQua
         <div className="metric"><div className="label">Name variants</div><div className="value">{summary.possibleTeamNameVariants}</div></div>
       </div>
       <div className="note-box">
-        Evidence readiness: {summary.readyFixtures} ready, {summary.reviewFixtures} review, {summary.incompleteFixtures} incomplete. Postponed/cancelled fixtures: {summary.postponedOrCancelled}. Orphaned tips: {summary.orphanedTips}.
+        Evidence readiness: {summary.readyFixtures} ready, {summary.reviewFixtures} review, {summary.incompleteFixtures} incomplete. Postponed/cancelled fixtures: {summary.postponedOrCancelled}.
       </div>
       <h4>Data-quality issues</h4>
       {summary.issues.length === 0 ? (
@@ -319,22 +306,6 @@ export function AccuracyDashboard(props: { accuracySummary: any; selectedRoundAc
         <div className="metric"><div className="label">Avg Confidence</div><div className="value">{accuracySummary.averageConfidence}%</div></div>
       </div>
       <div className="note-box">Selected round: {selectedRoundLabel} · Published tips {selectedRoundAccuracySummary.publishedTips} · Correct {selectedRoundAccuracySummary.correctTips} · Hit rate {selectedRoundAccuracySummary.hitRate}%.</div>
-    </section>
-  );
-}
-
-export function LeaderboardPanel(props: { leaderboard: LeaderboardEntry[]; selectedRoundLabel: string }) {
-  return (
-    <section className="card" style={{ marginBottom: 18 }}>
-      <h3>P16 Competition Leaderboard</h3>
-      <p className="section-help">Add entrants, record their fixture picks, then enter final scores. The leaderboard now follows the round filter: {props.selectedRoundLabel}. Correct home/away picks earn 1 point and correct draws earn 2 points.</p>
-      <div className="leaderboard-table">
-        <div className="leaderboard-row header-row"><span>Rank</span><span>Entrant</span><span>Points</span><span>Correct</span><span>Hit rate</span><span>Pending</span><span>Avg conf.</span></div>
-        {props.leaderboard.map((entrant, index) => (
-          <div className="leaderboard-row" key={entrant.id}><span>#{index + 1}</span><span>{entrant.name}</span><span>{entrant.points}</span><span>{entrant.correct}/{entrant.settled}</span><span>{entrant.hitRate}%</span><span>{entrant.pending}</span><span>{entrant.averageConfidence}%</span></div>
-        ))}
-      </div>
-      <div className="note-box">Competition data and the selected round view are included in browser autosave, JSON backup and Supabase workspace save/load.</div>
     </section>
   );
 }

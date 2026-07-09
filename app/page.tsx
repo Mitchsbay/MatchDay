@@ -2,14 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Entrant,
   Fixture,
   FixtureBetLog,
   TipPick,
-  UserTip,
-  entrants as initialEntrants,
   fixtures as initialFixtures,
-  userTips as initialUserTips,
 } from "../lib/sampleData";
 import {
   AbsenceReason,
@@ -36,8 +32,8 @@ import { useWorkspaceCloudSync } from "../hooks/useWorkspaceCloudSync";
 import { FixtureList } from "../components/FixtureList";
 import { RoundManagement } from "../components/RoundManagement";
 import { WorkspacePersistencePanel, WorkspaceRecoveryVaultPanel, WorkspaceRestoreResolverPanel, CloudSyncPanel, CustomCompetitionImportPanel, FixtureCsvPanel, FixtureAutomationPanel, LiveFixturesPanel, LiveFixtureMaintenancePanel, TeamAliasManagerPanel, type LiveFixtureAdminStatus } from "../components/WorkspacePanels";
-import { AccuracyDashboard, AdvancedDataCalibrationPanel, AdvancedDataGatePanel, AdvancedDataWeightControlsPanel, AdvancedDataWeightSandboxPanel, AdvancedEvidenceImpactPanel, AdvancedEvidencePanel, CompetitionDataQualityPanel, CompetitionInsightsPanel, EvidenceReadinessPanel, LeaderboardPanel, ModelTuningRecommendationsPanel, ModelVersionComparisonPanel, ProbabilityCalibrationPanel, ReleaseChecklistPanel, RuleLearningPanel, RuleWeightTuningPanel, TuningSandboxPanel } from "../components/DashboardPanels";
-import { PredictionSummaryPanel, FixtureDetailsPanel, EntrantsPicksPanel, ResultInputsPanel } from "../components/FixturePanels";
+import { AccuracyDashboard, AdvancedDataCalibrationPanel, AdvancedDataGatePanel, AdvancedDataWeightControlsPanel, AdvancedDataWeightSandboxPanel, AdvancedEvidenceImpactPanel, AdvancedEvidencePanel, CompetitionDataQualityPanel, CompetitionInsightsPanel, EvidenceReadinessPanel, ModelTuningRecommendationsPanel, ModelVersionComparisonPanel, ProbabilityCalibrationPanel, ReleaseChecklistPanel, RuleLearningPanel, RuleWeightTuningPanel, TuningSandboxPanel } from "../components/DashboardPanels";
+import { PredictionSummaryPanel, FixtureDetailsPanel, ResultInputsPanel } from "../components/FixturePanels";
 import { QuickPredictionPanel } from "../components/QuickPredictionPanel";
 import { BetLoggingPanel } from "../components/BetLoggingPanel";
 import { BankrollPanel } from "../components/BankrollPanel";
@@ -47,16 +43,12 @@ import { TeamStrengthInputsPanel, RecentFormInputsPanel, AvailabilityInputsPanel
 import {
   ALL_ROUNDS,
   applyFixtureBatch,
-  calculateTipPoints,
-  cloneEntrants,
   cloneFixtures,
-  cloneUserTips,
   createBlankFixture,
   createPersistedState,
   discoverLocalWorkspaceCandidates,
   getActualOutcomeFromScore,
   getFixtureBatchPreview,
-  getTipFor,
   normaliseRound,
   type FixtureBatchMode,
 } from "../lib/workspace";
@@ -94,15 +86,13 @@ import {
 } from "../lib/modelChangeLog";
 
 export default function Home() {
-  type WorkspaceTab = "tip" | "evidence" | "data" | "analytics" | "competition" | "bankroll" | "tennis";
+  type WorkspaceTab = "tip" | "evidence" | "data" | "analytics" | "bankroll" | "tennis";
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("tip");
   const [fixtures, setFixtures] = useState<Fixture[]>(() => cloneFixtures(initialFixtures));
   const [activeFixtureId, setActiveFixtureId] = useState(fixtures[0]?.id ?? "");
   const [selectedRound, setSelectedRound] = useState<string>(ALL_ROUNDS);
   const [ruleWeights, setRuleWeights] = useState<RuleWeights>(() => ({ ...defaultRuleWeights }));
   const [sandboxRuleWeights, setSandboxRuleWeights] = useState<RuleWeights>(() => ({ ...defaultRuleWeights }));
-  const [entrants, setEntrants] = useState<Entrant[]>(() => cloneEntrants(initialEntrants));
-  const [userTips, setUserTips] = useState<UserTip[]>(() => cloneUserTips(initialUserTips));
   const [teamAliases, setTeamAliases] = useState<TeamAliasRule[]>(() => cloneTeamAliases(DEFAULT_TEAM_ALIAS_RULES));
   const [tuningPresets, setTuningPresets] = useState<TuningPreset[]>([]);
   const [modelChangeLog, setModelChangeLog] = useState<ModelChangeLogEntry[]>([]);
@@ -183,8 +173,6 @@ export default function Home() {
     activeFixtureId,
     selectedRound,
     ruleWeights,
-    entrants,
-    userTips,
     teamAliases,
     tuningPresets,
     modelChangeLog,
@@ -193,8 +181,6 @@ export default function Home() {
     setActiveFixtureId,
     setSelectedRound,
     setRuleWeights,
-    setEntrants,
-    setUserTips,
     setTeamAliases,
     setTuningPresets,
     setModelChangeLog,
@@ -224,8 +210,6 @@ export default function Home() {
     activeFixtureId,
     selectedRound,
     ruleWeights,
-    entrants,
-    userTips,
     teamAliases,
     tuningPresets,
     modelChangeLog,
@@ -236,8 +220,6 @@ export default function Home() {
     setActiveFixtureId,
     setSelectedRound,
     setRuleWeights,
-    setEntrants,
-    setUserTips,
     setTeamAliases,
     setTuningPresets,
     setModelChangeLog,
@@ -285,8 +267,8 @@ export default function Home() {
   );
 
   const competitionDataQuality = useMemo(
-    () => summariseCompetitionDataQuality(fixtures, userTips, selectedCompetitionView || competitionNames[0] || ""),
-    [fixtures, userTips, selectedCompetitionView, competitionNames],
+    () => summariseCompetitionDataQuality(fixtures, selectedCompetitionView || competitionNames[0] || ""),
+    [fixtures, selectedCompetitionView, competitionNames],
   );
 
   const advancedEvidenceSummary = useMemo(
@@ -436,8 +418,6 @@ export default function Home() {
       activeFixtureId,
       selectedRound,
       ruleWeights,
-      entrants,
-      userTips,
       teamAliases,
       tuningPresets,
       modelChangeLog,
@@ -450,19 +430,18 @@ export default function Home() {
       localCandidates,
       recoverySnapshots,
     });
-  }, [fixtures, activeFixtureId, selectedRound, ruleWeights, entrants, userTips, teamAliases, tuningPresets, modelChangeLog, advancedDataControls, cloudPreviewState, recoverySnapshots]);
+  }, [fixtures, activeFixtureId, selectedRound, ruleWeights, teamAliases, tuningPresets, modelChangeLog, advancedDataControls, cloudPreviewState, recoverySnapshots]);
 
   const releaseChecklistSummary = useMemo(
     () => buildReleaseChecklist({
       fixtureCount: fixtures.length,
       competitionCount: competitionNames.length,
-      entrantCount: entrants.length,
       aliasRuleCount: teamAliases.length,
       tuningPresetCount: tuningPresets.length,
       modelChangeLogCount: modelChangeLog.length,
       hasSupabaseConfig: hasSupabaseConfig(),
     }),
-    [fixtures.length, competitionNames.length, entrants.length, teamAliases.length, tuningPresets.length, modelChangeLog.length, hasSupabaseConfig],
+    [fixtures.length, competitionNames.length, teamAliases.length, tuningPresets.length, modelChangeLog.length, hasSupabaseConfig],
   );
 
   const activeEvidenceAudit = useMemo(
@@ -472,46 +451,6 @@ export default function Home() {
 
   const teamNameIssues = useMemo(() => detectTeamNameIssues(fixtures), [fixtures]);
 
-  const leaderboard = useMemo(() => {
-    return entrants
-      .map((entrant) => {
-        let submitted = 0;
-        let settled = 0;
-        let correct = 0;
-        let pending = 0;
-        let points = 0;
-        let confidenceTotal = 0;
-
-        visibleFixtures.forEach((fixture) => {
-          const tip = getTipFor(userTips, fixture.id, entrant.id);
-          if (!tip) return;
-          submitted += 1;
-          confidenceTotal += tip.confidence;
-          const actualOutcome = getActualOutcomeFromScore(fixture.matchResult);
-          if (actualOutcome === "pending") {
-            pending += 1;
-            return;
-          }
-          settled += 1;
-          const awarded = calculateTipPoints(tip.pick, actualOutcome);
-          points += awarded;
-          if (awarded > 0) correct += 1;
-        });
-
-        return {
-          ...entrant,
-          submitted,
-          settled,
-          correct,
-          pending,
-          points,
-          hitRate: settled > 0 ? Math.round((correct / settled) * 100) : 0,
-          averageConfidence:
-            submitted > 0 ? Math.round(confidenceTotal / submitted) : 0,
-        };
-      })
-      .sort((a, b) => b.points - a.points || b.hitRate - a.hitRate || b.correct - a.correct);
-  }, [entrants, visibleFixtures, userTips]);
   function generateAutomatedFixtures(request: FixtureGenerationRequest, mode: "append" | "replace") {
     const generation = generateRoundRobinFixtures(request);
     if (generation.fixtures.length === 0) {
@@ -519,17 +458,12 @@ export default function Home() {
       return;
     }
 
-    const applied = applyFixtureBatch(generation.fixtures, fixtures, userTips, mode);
+    const applied = applyFixtureBatch(generation.fixtures, fixtures, mode);
     setFixtures(applied.fixtures);
-    setUserTips(applied.tips);
     setActiveFixtureId(applied.fixtures[0].id);
     setSelectedRound(normaliseRound(applied.fixtures[0].round));
     setAutomationMessage(
-      `Generated ${generation.fixtures.length} fixtures for ${generation.teams.length} teams using ${request.format} round-robin ${mode} mode.${
-        applied.orphanedTipsCount > 0
-          ? ` Removed ${applied.orphanedTipsCount} tip${applied.orphanedTipsCount === 1 ? "" : "s"} that pointed at fixtures no longer in the workspace.`
-          : ""
-      }${generation.warnings.length ? ` Warnings: ${generation.warnings.join(" ")}` : ""}`,
+      `Generated ${generation.fixtures.length} fixtures for ${generation.teams.length} teams using ${request.format} round-robin ${mode} mode.${generation.warnings.length ? ` Warnings: ${generation.warnings.join(" ")}` : ""}`,
     );
   }
 
@@ -542,17 +476,12 @@ export default function Home() {
         return;
       }
 
-      const applied = applyFixtureBatch(result.fixtures, fixtures, userTips, mode);
+      const applied = applyFixtureBatch(result.fixtures, fixtures, mode);
       setFixtures(applied.fixtures);
-      setUserTips(applied.tips);
       setActiveFixtureId(applied.fixtures[0].id);
       setSelectedRound(normaliseRound(applied.fixtures[0].round));
       setLiveFixturesMessage(
-        `Fetched ${result.fixtures.length} live fixtures using ${mode} mode.${
-          applied.orphanedTipsCount > 0
-            ? ` Removed ${applied.orphanedTipsCount} tip${applied.orphanedTipsCount === 1 ? "" : "s"} that pointed at fixtures no longer in the workspace.`
-            : ""
-        }${result.warnings.length ? ` Warnings: ${result.warnings.join(" ")}` : ""}`,
+        `Fetched ${result.fixtures.length} live fixtures using ${mode} mode.${result.warnings.length ? ` Warnings: ${result.warnings.join(" ")}` : ""}`,
       );
     } finally {
       setIsLoadingLiveFixtures(false);
@@ -568,7 +497,7 @@ export default function Home() {
 
     if (action === "cleanup") {
       const confirmed = window.confirm(
-        "Clean old rows from the shared live fixture cache? This only deletes cached live_fixtures rows older than the retention window and does not touch your workspace fixtures or entrant tips. Continue?",
+        "Clean old rows from the shared live fixture cache? This only deletes cached live_fixtures rows older than the retention window and does not touch your workspace fixtures. Continue?",
       );
       if (!confirmed) return;
     }
@@ -637,9 +566,6 @@ export default function Home() {
     if (applied.updatedFixtureCount > 0 || applied.addedFixtureCount > 0) {
       parts.push(`Updated ${applied.updatedFixtureCount} matching fixture${applied.updatedFixtureCount === 1 ? "" : "s"} and added ${applied.addedFixtureCount} new fixture${applied.addedFixtureCount === 1 ? "" : "s"}.`);
     }
-    if (applied.orphanedTipsCount > 0) {
-      parts.push(`Removed ${applied.orphanedTipsCount} tip${applied.orphanedTipsCount === 1 ? "" : "s"} that pointed at fixtures no longer in the workspace.`);
-    }
     return parts.length ? ` ${parts.join(" ")}` : "";
   }
 
@@ -664,7 +590,7 @@ export default function Home() {
     return {
       title: "Prediction-ready import preview",
       mode,
-      preview: getFixtureBatchPreview(importResult.fixtures, fixtures, userTips, mode),
+      preview: getFixtureBatchPreview(importResult.fixtures, fixtures, mode),
       warnings: importResult.warnings,
       apply: () => {
         if (!confirmImportApply(mode, "prediction-ready import")) return;
@@ -680,9 +606,8 @@ export default function Home() {
       return;
     }
 
-    const applied = applyFixtureBatch(importResult.fixtures, fixtures, userTips, mode);
+    const applied = applyFixtureBatch(importResult.fixtures, fixtures, mode);
     setFixtures(applied.fixtures);
-    setUserTips(applied.tips);
     setActiveFixtureId(applied.fixtures[0].id);
     setSelectedRound(normaliseRound(applied.fixtures[0].round));
     setCsvMessage(
@@ -724,9 +649,8 @@ export default function Home() {
       return;
     }
 
-    const applied = applyFixtureBatch(importResult.fixtures, fixtures, userTips, mode, importResult.competitions);
+    const applied = applyFixtureBatch(importResult.fixtures, fixtures, mode, importResult.competitions);
     setFixtures(applied.fixtures);
-    setUserTips(applied.tips);
     setActiveFixtureId(applied.fixtures[0].id);
     setSelectedRound(normaliseRound(applied.fixtures[0].round));
     setCustomCompetitionMessage(
@@ -758,7 +682,7 @@ export default function Home() {
     return {
       title: "Custom raw competition import preview",
       mode,
-      preview: getFixtureBatchPreview(importResult.fixtures, fixtures, userTips, mode, importResult.competitions),
+      preview: getFixtureBatchPreview(importResult.fixtures, fixtures, mode, importResult.competitions),
       warnings: importResult.warnings,
       apply: () => {
         if (!confirmImportApply(mode, "custom competition import")) return;
@@ -775,7 +699,7 @@ export default function Home() {
     return {
       title: "Teams + Fixtures workbook import preview",
       mode,
-      preview: getFixtureBatchPreview(importResult.fixtures, fixtures, userTips, mode, importResult.competitions),
+      preview: getFixtureBatchPreview(importResult.fixtures, fixtures, mode, importResult.competitions),
       warnings: importResult.warnings,
       apply: () => {
         if (!confirmImportApply(mode, "Teams + Fixtures workbook import")) return;
@@ -842,6 +766,7 @@ export default function Home() {
 
   function updateTipCompetitionView(competition: string) {
     setSelectedCompetitionView(competition);
+    setSelectedRound(ALL_ROUNDS);
     const nextVisible = visibleFixtureResults.filter((item) => !competition || item.fixture.competition === competition);
     if (nextVisible.length > 0 && !nextVisible.some((item) => item.fixture.id === activeFixtureId)) {
       setActiveFixtureId(nextVisible[0].fixture.id);
@@ -969,7 +894,7 @@ export default function Home() {
   }
 
   function clearModelChangeLog() {
-    if (!window.confirm("Clear the model change log? This does not change live weights, presets, tips, or fixtures.")) return;
+    if (!window.confirm("Clear the model change log? This does not change live weights, presets, or fixtures.")) return;
     setModelChangeLog([]);
   }
 
@@ -985,208 +910,8 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
-  function updateEntrantName(entrantId: string, name: string) {
-    setEntrants((current) =>
-      current.map((entrant) =>
-        entrant.id === entrantId ? { ...entrant, name } : entrant,
-      ),
-    );
-  }
-
-  function addEntrant() {
-    const nextId = `entrant-${Date.now()}`;
-    setEntrants((current) => [
-      ...current,
-      { id: nextId, name: `Player ${current.length + 1}` },
-    ]);
-  }
-
-  function updateUserTip(entrantId: string, key: keyof UserTip, value: string | number) {
-    setUserTips((current) => {
-      const existing = current.find(
-        (tip) => tip.fixtureId === activeFixture.id && tip.entrantId === entrantId,
-      );
-      const nextTip: UserTip = {
-        fixtureId: activeFixture.id,
-        entrantId,
-        pick:
-          key === "pick"
-            ? (value as TipPick)
-            : existing?.pick ?? "home",
-        confidence:
-          key === "confidence"
-            ? Math.max(0, Math.min(100, Number(value)))
-            : existing?.confidence ?? 50,
-      };
-
-      if (!existing) return [...current, nextTip];
-
-      return current.map((tip) =>
-        tip.fixtureId === activeFixture.id && tip.entrantId === entrantId
-          ? nextTip
-          : tip,
-      );
-    });
-  }
-
-  function updateStats(
-    side: "homeStats" | "awayStats",
-    key: keyof TeamStats,
-    value: number,
-  ) {
-    setFixtures((current) =>
-      current.map((fixture) =>
-        fixture.id === activeFixture.id
-          ? {
-              ...fixture,
-              [side]: { ...fixture[side], [key]: Math.max(0, value) },
-            }
-          : fixture,
-      ),
-    );
-  }
-
-  function updateRecentForm(
-    side: "homeRecentForm" | "awayRecentForm",
-    index: number,
-    key: keyof RecentFormGame,
-    value: number | RecentResult,
-  ) {
-    setFixtures((current) =>
-      current.map((fixture) => {
-        if (fixture.id !== activeFixture.id) return fixture;
-        const nextForm = fixture[side].map((game, gameIndex) =>
-          gameIndex === index
-            ? {
-                ...game,
-                [key]: typeof value === "number" ? Math.max(0, value) : value,
-              }
-            : game,
-        );
-        return { ...fixture, [side]: nextForm };
-      }),
-    );
-  }
-
-  function updateMissingPlayer(
-    side: "homeMissingPlayers" | "awayMissingPlayers",
-    index: number,
-    key: keyof MissingPlayer,
-    value: string | boolean,
-  ) {
-    setFixtures((current) =>
-      current.map((fixture) => {
-        if (fixture.id !== activeFixture.id) return fixture;
-        const nextPlayers = fixture[side].map((player, playerIndex) =>
-          playerIndex === index ? { ...player, [key]: value } : player,
-        );
-        return { ...fixture, [side]: nextPlayers };
-      }),
-    );
-  }
-
-  function updateTeamContext(
-    side: "homeContext" | "awayContext",
-    key: keyof TeamContext,
-    value: boolean,
-  ) {
-    setFixtures((current) =>
-      current.map((fixture) =>
-        fixture.id === activeFixture.id
-          ? { ...fixture, [side]: { ...fixture[side], [key]: value } }
-          : fixture,
-      ),
-    );
-  }
-
-  function updateMatchContext(key: keyof MatchContext, value: boolean) {
-    setFixtures((current) =>
-      current.map((fixture) =>
-        fixture.id === activeFixture.id
-          ? {
-              ...fixture,
-              matchContext: { ...fixture.matchContext, [key]: value },
-            }
-          : fixture,
-      ),
-    );
-  }
-
-  function updateOddsMarket(key: keyof OddsMarket, value: number | string) {
-    setFixtures((current) =>
-      current.map((fixture) =>
-        fixture.id === activeFixture.id
-          ? {
-              ...fixture,
-              oddsMarket: {
-                ...fixture.oddsMarket,
-                [key]: typeof value === "number" ? Math.max(0, value) : value,
-              },
-            }
-          : fixture,
-      ),
-    );
-  }
-
-  function updateMatchResult(
-    key: keyof MatchResultInput,
-    value: number | string,
-  ) {
-    setFixtures((current) =>
-      current.map((fixture) =>
-        fixture.id === activeFixture.id
-          ? {
-              ...fixture,
-              matchResult: {
-                ...fixture.matchResult,
-                [key]: typeof value === "number" ? Math.max(0, value) : value,
-              },
-            }
-          : fixture,
-      ),
-    );
-  }
-
-  function resetFixture() {
-    const original = initialFixtures.find(
-      (fixture) => fixture.id === activeFixture.id,
-    );
-    if (!original) return;
-    setFixtures((current) =>
-      current.map((fixture) =>
-        fixture.id === activeFixture.id
-          ? {
-              ...fixture,
-              homeStats: { ...original.homeStats },
-              awayStats: { ...original.awayStats },
-              homeRecentForm: original.homeRecentForm.map((game) => ({
-                ...game,
-              })),
-              awayRecentForm: original.awayRecentForm.map((game) => ({
-                ...game,
-              })),
-              homeMissingPlayers: original.homeMissingPlayers.map((player) => ({
-                ...player,
-              })),
-              awayMissingPlayers: original.awayMissingPlayers.map((player) => ({
-                ...player,
-              })),
-              homeContext: { ...original.homeContext },
-              awayContext: { ...original.awayContext },
-              matchContext: { ...original.matchContext },
-              oddsMarket: { ...original.oddsMarket },
-              matchResult: { ...original.matchResult },
-              scores: { ...original.scores },
-            }
-          : fixture,
-      ),
-    );
-  }
-
   function addBlankFixture() {
-    const nextFixture = createBlankFixture(
-      selectedRound === ALL_ROUNDS ? "New Round" : selectedRound,
-    );
+    const nextFixture = createBlankFixture(selectedRound === ALL_ROUNDS ? "Round 1" : selectedRound, activeFixture?.competition ?? (selectedCompetitionView || "New Competition"));
     setFixtures((current) => [nextFixture, ...current]);
     setActiveFixtureId(nextFixture.id);
   }
@@ -1230,10 +955,10 @@ export default function Home() {
     <main className="container">
       <section className="header">
         <div>
-          <div className="eyebrow">Tipping Gates App · P47.2</div>
+          <div className="eyebrow">Tipping Gates App · P47.4</div>
           <h1>Evidence-based tipping gates with cleaner day-to-day tipping flow.</h1>
           <p className="lead">
-            P47.2 filters Tip Now by competition, adds fixture bet logging, introduces My Bankroll, and keeps round controls scoped to Tip Now.
+            P47.4 filters Tip Now by competition, adds fixture bet logging, introduces My Bankroll, and keeps round controls scoped to Tip Now.
           </p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
@@ -1267,9 +992,6 @@ export default function Home() {
         </button>
         <button className={activeTab === "analytics" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("analytics")}>
           Analytics &amp; Admin
-        </button>
-        <button className={activeTab === "competition" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("competition")}>
-          Competition
         </button>
         <button className={activeTab === "bankroll" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("bankroll")}>
           My Bankroll
@@ -1450,6 +1172,8 @@ export default function Home() {
           {activeTab === "analytics" && (
             <>
               <ReleaseChecklistPanel summary={releaseChecklistSummary} />
+              <CompetitionInsightsPanel insights={competitionInsights} />
+              <CompetitionDataQualityPanel summary={competitionDataQuality} />
               <AccuracyDashboard
                 accuracySummary={accuracySummary}
                 selectedRoundAccuracySummary={selectedRoundAccuracySummary}
@@ -1515,28 +1239,6 @@ export default function Home() {
                 onUpdateWeight={updateRuleWeight}
                 onResetWeights={resetRuleWeights}
               />
-            </>
-          )}
-
-          {activeTab === "competition" && (
-            <>
-              <CompetitionInsightsPanel
-                competitionNames={competitionNames}
-                selectedCompetition={competitionInsights.competition}
-                insights={competitionInsights}
-                onCompetitionChange={setSelectedCompetitionView}
-              />
-              <CompetitionDataQualityPanel summary={competitionDataQuality} />
-              <EntrantsPicksPanel
-                fixture={activeFixture}
-                entrants={entrants}
-                userTips={userTips}
-                accuracy={accuracy}
-                onUpdateEntrantName={updateEntrantName}
-                onUpdateUserTip={updateUserTip}
-                onAddEntrant={addEntrant}
-              />
-              <LeaderboardPanel leaderboard={leaderboard} selectedRoundLabel={selectedRoundLabel} />
             </>
           )}
 

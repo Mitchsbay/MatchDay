@@ -368,7 +368,7 @@ export function FixtureAutomationPanel(props: {
     if (mode === "replace") {
       const confirmed = window.confirm(
         "Replace mode deletes every fixture currently in this workspace and swaps in the generated fixture list instead. " +
-          "Any tips submitted against fixtures that get removed will no longer count toward the leaderboard. " +
+          "" +
           "Export a JSON backup first if this is a real competition. Continue?",
       );
       if (!confirmed) return;
@@ -426,7 +426,7 @@ export function LiveFixturesPanel(props: {
     if (mode === "replace") {
       const confirmed = window.confirm(
         "Replace mode deletes every fixture currently in this workspace and swaps in the live fixture list instead. " +
-          "Any tips submitted against fixtures that get removed will no longer count toward the leaderboard. " +
+          "" +
           "Export a JSON backup first if this is a real competition. Continue?"
       );
       if (!confirmed) return;
@@ -617,7 +617,7 @@ export function WorkspaceRestoreResolverPanel(props: {
               <tr key={candidate.id}>
                 <td><strong>{candidate.label}</strong><br /><span className="muted-text">{candidate.sourceType}</span></td>
                 <td>
-                  {candidate.metrics.fixtureCount} fixtures / {candidate.metrics.competitionCount} competitions / {candidate.metrics.userTipCount} tips
+                  {candidate.metrics.fixtureCount} fixtures / {candidate.metrics.competitionCount} competitions
                   <br />
                   <span className="muted-text">Aliases {candidate.metrics.aliasCount} · Presets {candidate.metrics.tuningPresetCount} · Logs {candidate.metrics.modelChangeLogCount}</span>
                 </td>
@@ -678,7 +678,7 @@ export function WorkspaceRecoveryVaultPanel(props: {
                   <td>{new Date(snapshot.createdAt).toLocaleString()}</td>
                   <td>{snapshot.reason}</td>
                   <td><strong>{snapshot.label}</strong></td>
-                  <td>{snapshot.metrics.fixtureCount} fixtures / {snapshot.metrics.competitionCount} competitions / {snapshot.metrics.userTipCount} tips</td>
+                  <td>{snapshot.metrics.fixtureCount} fixtures / {snapshot.metrics.competitionCount} competitions</td>
                   <td>
                     <button className="secondary compact-button" onClick={() => props.onRestoreSnapshot(snapshot.id)}>Restore</button>{" "}
                     <button className="secondary compact-button danger" onClick={() => props.onDeleteSnapshot(snapshot.id)}>Delete</button>

@@ -36,7 +36,6 @@ function candidateWarnings(state: PersistedAppState, metrics: WorkspacePreservat
   const warnings: string[] = [];
   if (metrics.fixtureCount === 0) warnings.push("No fixtures saved in this copy.");
   if (metrics.competitionCount === 0) warnings.push("No competitions found in this copy.");
-  if (metrics.userTipCount === 0) warnings.push("No entrant tips saved in this copy.");
   if ((state.teamAliases?.length ?? 0) === 0) warnings.push("No team alias rules saved in this copy.");
   if (!state.savedAt || savedAtMs(state) === 0) warnings.push("Missing or invalid savedAt timestamp.");
   return warnings;
@@ -94,7 +93,6 @@ export function buildWorkspaceRestoreResolverSummary(args: {
       candidate.sourceType,
       candidate.metrics.fixtureCount,
       candidate.metrics.competitionCount,
-      candidate.metrics.userTipCount,
       candidate.metrics.tuningPresetCount,
       candidate.metrics.modelChangeLogCount,
       candidate.lastUpdatedMs,

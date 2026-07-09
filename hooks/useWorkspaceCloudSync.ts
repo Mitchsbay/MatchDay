@@ -2,13 +2,7 @@
 
 import { Dispatch, SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { Session, SupabaseClient } from "@supabase/supabase-js";
-import {
-  Entrant,
-  Fixture,
-  UserTip,
-  entrants as initialEntrants,
-  userTips as initialUserTips,
-} from "../lib/sampleData";
+import { Fixture } from "../lib/sampleData";
 import { RuleWeights, defaultRuleWeights } from "../lib/scoringEngine";
 import { DEFAULT_TEAM_ALIAS_RULES, TeamAliasRule, cloneTeamAliases, isTeamAliasRuleArray } from "../lib/teamAliases";
 import { TuningPreset, cloneTuningPresets, isTuningPresetArray } from "../lib/tuningPresets";
@@ -18,9 +12,7 @@ import {
   ALL_ROUNDS,
   CLOUD_WORKSPACE_ID_KEY,
   LEGACY_CLOUD_WORKSPACE_ID_KEYS,
-  cloneEntrants,
   cloneFixtures,
-  cloneUserTips,
   createPersistedState,
   discoverLocalWorkspaceCandidates,
   isPersistedAppState,
@@ -43,8 +35,6 @@ type WorkspaceCloudSyncArgs = {
   activeFixtureId: string;
   selectedRound: string;
   ruleWeights: RuleWeights;
-  entrants: Entrant[];
-  userTips: UserTip[];
   teamAliases: TeamAliasRule[];
   tuningPresets: TuningPreset[];
   modelChangeLog: ModelChangeLogEntry[];
@@ -58,8 +48,6 @@ type WorkspaceCloudSyncArgs = {
   setActiveFixtureId: Dispatch<SetStateAction<string>>;
   setSelectedRound: Dispatch<SetStateAction<string>>;
   setRuleWeights: Dispatch<SetStateAction<RuleWeights>>;
-  setEntrants: Dispatch<SetStateAction<Entrant[]>>;
-  setUserTips: Dispatch<SetStateAction<UserTip[]>>;
   setTeamAliases: Dispatch<SetStateAction<TeamAliasRule[]>>;
   setTuningPresets: Dispatch<SetStateAction<TuningPreset[]>>;
   setModelChangeLog: Dispatch<SetStateAction<ModelChangeLogEntry[]>>;
@@ -82,8 +70,6 @@ export function useWorkspaceCloudSync({
   activeFixtureId,
   selectedRound,
   ruleWeights,
-  entrants,
-  userTips,
   teamAliases,
   tuningPresets,
   modelChangeLog,
@@ -94,8 +80,6 @@ export function useWorkspaceCloudSync({
   setActiveFixtureId,
   setSelectedRound,
   setRuleWeights,
-  setEntrants,
-  setUserTips,
   setTeamAliases,
   setTuningPresets,
   setModelChangeLog,
@@ -114,8 +98,8 @@ export function useWorkspaceCloudSync({
   const lastAutoSavedSignatureRef = useRef("");
 
   const currentWorkspaceState = useMemo(
-    () => createPersistedState(fixtures, activeFixtureId, selectedRound, ruleWeights, entrants, userTips, teamAliases, tuningPresets, modelChangeLog, advancedDataControls, recoverySnapshots),
-    [fixtures, activeFixtureId, selectedRound, ruleWeights, entrants, userTips, teamAliases, tuningPresets, modelChangeLog, advancedDataControls, recoverySnapshots],
+    () => createPersistedState(fixtures, activeFixtureId, selectedRound, ruleWeights, teamAliases, tuningPresets, modelChangeLog, advancedDataControls, recoverySnapshots),
+    [fixtures, activeFixtureId, selectedRound, ruleWeights, teamAliases, tuningPresets, modelChangeLog, advancedDataControls, recoverySnapshots],
   );
 
   function applyWorkspaceState(nextState: typeof currentWorkspaceState, sourceLabel: string) {
@@ -133,8 +117,6 @@ export function useWorkspaceCloudSync({
         : ALL_ROUNDS,
     );
     setRuleWeights({ ...defaultRuleWeights, ...nextState.ruleWeights });
-    setEntrants(nextState.entrants ? cloneEntrants(nextState.entrants) : cloneEntrants(initialEntrants));
-    setUserTips(nextState.userTips ? cloneUserTips(nextState.userTips) : cloneUserTips(initialUserTips));
     setTeamAliases(isTeamAliasRuleArray(nextState.teamAliases) ? cloneTeamAliases(nextState.teamAliases) : cloneTeamAliases(DEFAULT_TEAM_ALIAS_RULES));
     setTuningPresets(isTuningPresetArray(nextState.tuningPresets) ? cloneTuningPresets(nextState.tuningPresets) : []);
     setModelChangeLog(isModelChangeLogArray(nextState.modelChangeLog) ? cloneModelChangeLog(nextState.modelChangeLog) : []);
@@ -250,7 +232,7 @@ export function useWorkspaceCloudSync({
       const manualOverride =
         existingState && shouldBlockWeakerWorkspaceOverwrite(currentWorkspaceState, existingState)
           ? window.confirm(
-              "The existing Supabase workspace appears richer than the current local workspace. Saving now may overwrite competitions, fixtures or tips. Continue anyway?",
+              "The existing Supabase workspace appears richer than the current local workspace. Saving now may overwrite competitions or fixtures. Continue anyway?",
             )
           : true;
 
@@ -297,7 +279,7 @@ export function useWorkspaceCloudSync({
       const localCandidate = selectBestLocalWorkspaceCandidate(discoverLocalWorkspaceCandidates(window.localStorage));
       if (localCandidate?.state && shouldBlockWeakerWorkspaceOverwrite(cloudState, localCandidate.state)) {
         const keepLocal = !window.confirm(
-          "Your browser backup appears richer than the Supabase workspace. Loading cloud may hide local competitions or tips. Continue loading Supabase anyway?",
+          "Your browser backup appears richer than the Supabase workspace. Loading cloud may hide local competitions or fixtures. Continue loading Supabase anyway?",
         );
         if (keepLocal) {
           setCloudMessage("Cloud load cancelled to protect the richer browser workspace.");
@@ -372,7 +354,6 @@ export function useWorkspaceCloudSync({
       savedAt: currentWorkspaceState.savedAt,
       fixtureCount: metrics.fixtureCount,
       competitionCount: metrics.competitionCount,
-      userTipCount: metrics.userTipCount,
       presetCount: metrics.tuningPresetCount,
       logCount: metrics.modelChangeLogCount,
     });

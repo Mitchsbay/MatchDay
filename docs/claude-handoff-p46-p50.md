@@ -163,3 +163,26 @@ Version: 0.47.3
 Verification:
 - `npm run check:lockfile` passed.
 - Full dependency-backed verification should be rerun after installing dependencies.
+
+## P47.4 — Single-User Tips Cleanup + Analytics Relocation
+
+What changed:
+- Removed the multi-entrant tipping competition UI and state path.
+- Removed EntrantsPicksPanel and LeaderboardPanel from active code.
+- Removed Entrant/UserTip sample data and workspace persistence wiring.
+- Removed orphaned-tip data-quality check.
+- Moved CompetitionDataQualityPanel and CompetitionInsightsPanel into Analytics & Admin.
+- CompetitionInsightsPanel now uses selectedCompetitionView only and no longer renders its own competition picker.
+- Removed the Competition tab from navigation.
+- Fixed Tip Now competition switching by resetting selectedRound to ALL_ROUNDS when the competition changes.
+
+Standing items:
+- Tennis H2H gate: left alone / preserved.
+- Alias-priority fix: left alone / preserved.
+- P28 probability rounding fix: left alone / preserved.
+- Lockfile guard: left alone / preserved.
+
+Version: 0.47.4
+Verification:
+- npm run check:lockfile passed.
+- Full dependency install/typecheck/build could not be completed in this container because npm ci was terminated before node_modules installed.

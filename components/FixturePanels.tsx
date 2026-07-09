@@ -1,11 +1,10 @@
 "use client";
 
-import type { Entrant, Fixture, TipPick, UserTip } from "../lib/sampleData";
+import type { Fixture } from "../lib/sampleData";
 import type { FixtureEvidenceAudit } from "../lib/evidenceAudit";
 import type { MatchResultInput } from "../lib/scoringEngine";
 import type { OutcomeProbabilities } from "../lib/probabilityModel";
 import { accuracyBadge, gateBadge, outcomeLabel, signed } from "../lib/uiFormat";
-import { getTipFor } from "../lib/workspace";
 
 export function PredictionSummaryPanel(props: { fixture: Fixture; result: any; quality: any; form: any; availability: any; context: any; odds: any; conflict: any; probabilities: OutcomeProbabilities; accuracy: any; evidenceAudit: FixtureEvidenceAudit }) {
   const { fixture, result, quality, form, availability, context, odds, conflict, probabilities, accuracy, evidenceAudit } = props;
@@ -59,30 +58,6 @@ export function FixtureDetailsPanel(props: { fixture: Fixture; onUpdateField: (k
         <label><span>Round</span><input className="text-input" value={fixture.round} onChange={(event) => props.onUpdateField("round", event.target.value)} /></label>
         <label><span>Date</span><input className="text-input" value={fixture.date} onChange={(event) => props.onUpdateField("date", event.target.value)} /></label>
       </div>
-    </section>
-  );
-}
-
-export function EntrantsPicksPanel(props: { fixture: Fixture; entrants: Entrant[]; userTips: UserTip[]; accuracy: any; onUpdateEntrantName: (entrantId: string, name: string) => void; onUpdateUserTip: (entrantId: string, key: keyof UserTip, value: string | number) => void; onAddEntrant: () => void }) {
-  return (
-    <section className="card" style={{ marginBottom: 18 }}>
-      <h3>P14 Entrants + Picks</h3>
-      <p className="section-help">Record each entrant’s tip for the selected fixture. These picks are separate from the model prediction, so the app can run both the prediction engine and the actual tipping competition.</p>
-      <div className="entrant-list">
-        {props.entrants.map((entrant) => {
-          const tip = getTipFor(props.userTips, props.fixture.id, entrant.id);
-          return (
-            <div className="entrant-row" key={entrant.id}>
-              <input className="text-input" value={entrant.name} onChange={(event) => props.onUpdateEntrantName(entrant.id, event.target.value)} />
-              <select value={tip?.pick ?? "home"} onChange={(event) => props.onUpdateUserTip(entrant.id, "pick", event.target.value as TipPick)}><option value="home">Home win</option><option value="draw">Draw</option><option value="away">Away win</option></select>
-              <input type="number" min={0} max={100} className="score-input" value={tip?.confidence ?? 50} onChange={(event) => props.onUpdateUserTip(entrant.id, "confidence", Number(event.target.value))} />
-              <span className="fixture-meta">confidence</span>
-            </div>
-          );
-        })}
-      </div>
-      <div className="actions"><button className="secondary" onClick={props.onAddEntrant}>Add entrant</button></div>
-      <div className="note-box">Final score for this fixture: {outcomeLabel(props.accuracy.actualOutcome)}. Correct draw picks are worth 2 points because they are harder to land.</div>
     </section>
   );
 }

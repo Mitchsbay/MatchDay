@@ -1,4 +1,4 @@
-import type { Fixture, UserTip } from "./sampleData";
+import type { Fixture } from "./sampleData";
 import { auditFixtureEvidence } from "./evidenceAudit";
 import { normaliseComparableName } from "./teamAliases";
 
@@ -25,7 +25,6 @@ export type CompetitionDataQualitySummary = {
   incompleteFixtures: number;
   duplicateFixtureRows: number;
   possibleTeamNameVariants: number;
-  orphanedTips: number;
   dataQualityScore: number;
   status: "healthy" | "review" | "needs-work";
   issues: CompetitionDataQualityIssue[];
@@ -101,14 +100,10 @@ function statusFromScore(score: number, blockers: number): CompetitionDataQualit
 
 export function summariseCompetitionDataQuality(
   fixtures: Fixture[],
-  userTips: UserTip[],
   competition: string,
 ): CompetitionDataQualitySummary {
   const scopedFixtures = fixtures.filter((fixture) => fixture.competition === competition);
   const issues: CompetitionDataQualityIssue[] = [];
-  const fixtureIdSet = new Set(fixtures.map((fixture) => fixture.id));
-  const orphanedTips = userTips.filter((tip) => !fixtureIdSet.has(tip.fixtureId)).length;
-
   const missingTeams = scopedFixtures.filter(
     (fixture) => isBlankOrTbd(fixture.homeTeam) || isBlankOrTbd(fixture.awayTeam),
   );
@@ -217,13 +212,6 @@ export function summariseCompetitionDataQuality(
     fixtureIds: [],
   });
 
-  pushIssue(issues, {
-    severity: "warning",
-    category: "Tips",
-    message: "Some saved tips point at fixture IDs that no longer exist in the workspace.",
-    count: orphanedTips,
-    fixtureIds: [],
-  });
 
   const evidenceAudits = scopedFixtures.map(auditFixtureEvidence);
   const averageEvidenceCompleteness = evidenceAudits.length
@@ -256,7 +244,6 @@ export function summariseCompetitionDataQuality(
     incompleteFixtures,
     duplicateFixtureRows,
     possibleTeamNameVariants: variantGroups.length,
-    orphanedTips,
     dataQualityScore,
     status: statusFromScore(dataQualityScore, blockers),
     issues,

@@ -92,8 +92,6 @@ function snapshotShapeSignature(snapshot: WorkspaceRecoverySnapshot): string {
     metrics.fixtureCount,
     metrics.competitionCount,
     metrics.finalFixtureCount,
-    metrics.userTipCount,
-    metrics.entrantCount,
     metrics.aliasCount,
     metrics.tuningPresetCount,
     metrics.modelChangeLogCount,

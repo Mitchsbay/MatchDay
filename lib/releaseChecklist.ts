@@ -27,14 +27,13 @@ export type ReleaseChecklistSummary = {
 export type BuildReleaseChecklistInput = {
   fixtureCount: number;
   competitionCount: number;
-  entrantCount: number;
   aliasRuleCount: number;
   tuningPresetCount: number;
   modelChangeLogCount: number;
   hasSupabaseConfig: boolean;
 };
 
-export const CURRENT_RELEASE_VERSION = "0.47.3";
+export const CURRENT_RELEASE_VERSION = "0.47.4";
 
 export function buildReleaseChecklist(input: BuildReleaseChecklistInput): ReleaseChecklistSummary {
   const hasFixtures = input.fixtureCount > 0;
@@ -42,8 +41,8 @@ export function buildReleaseChecklist(input: BuildReleaseChecklistInput): Releas
 
   return {
     version: CURRENT_RELEASE_VERSION,
-    patch: "P47.3",
-    title: "Tip Now UX + My Bankroll",
+    patch: "P47.4",
+    title: "Single-user tips cleanup + analytics relocation",
     verificationCommand: "npm run verify",
     deploymentItems: [
       {
@@ -85,12 +84,6 @@ export function buildReleaseChecklist(input: BuildReleaseChecklistInput): Releas
         label: "Competition coverage",
         status: hasCompetitions ? "pass" : "warn",
         detail: `${input.competitionCount} competition${input.competitionCount === 1 ? "" : "s"} detected from workspace fixtures.`,
-      },
-      {
-        id: "entrants",
-        label: "Competition entrants",
-        status: input.entrantCount > 0 ? "pass" : "info",
-        detail: `${input.entrantCount} entrant${input.entrantCount === 1 ? "" : "s"} configured for leaderboard/tips.`,
       },
       {
         id: "aliases",
