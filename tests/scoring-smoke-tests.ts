@@ -1,5 +1,6 @@
 import assert from "assert/strict";
-import { fixtures } from "../lib/sampleData";
+import { verifyRequestSession } from "../lib/serverAuth";
+import { fixtures, type Fixture } from "../lib/sampleData";
 import { exportFixturesToCsv, importFixturesFromCsv } from "../lib/csvWorkspace";
 import { exportRawCompetitionTemplateCsv, getCustomWorkbookTemplate, importCustomCompetitionFromCsv, importCustomCompetitionFromWorkbookSheets } from "../lib/customCompetitionImport";
 import { generateRoundRobinFixtures, parseFixtureGeneratorTeams } from "../lib/fixtureAutomation";
@@ -60,6 +61,30 @@ import {
   getAwayTeamsForMatchup,
   getTeamsForCompetition,
 } from "../lib/quickPrediction";
+import { getCompetitionNames, summariseCompetition } from "../lib/competitionInsights";
+import { calculateOutcomeProbabilities } from "../lib/probabilityModel";
+import { calculateMulticlassBrierScore, summariseProbabilityCalibration } from "../lib/probabilityCalibration";
+import { summariseModelTuningRecommendations } from "../lib/modelTuningRecommendations";
+import { summariseTuningSandbox } from "../lib/tuningSandbox";
+import { cloneTuningPresets, createTuningPreset, deleteTuningPreset, getPresetWeightChangeCount, isTuningPresetArray, updateTuningPreset } from "../lib/tuningPresets";
+import { appendModelChangeLogEntry, createModelChangeLogEntry, getChangedRuleWeightKeys, isModelChangeLogArray, summariseModelChangeLog } from "../lib/modelChangeLog";
+import { buildModelVersionComparisonTargets, summariseModelVersionComparison } from "../lib/modelVersionComparison";
+import { buildReleaseChecklist, countChecklistStatuses } from "../lib/releaseChecklist";
+import { addWorkspaceRecoverySnapshot, createWorkspaceRecoverySnapshot, pruneWorkspaceRecoveryVault, shouldCreateAutomaticWorkspaceSnapshot, summariseWorkspaceRecoveryVault } from "../lib/workspaceBackupVault";
+import { summariseCompetitionDataQuality } from "../lib/competitionDataQuality";
+import { chooseSaferWorkspaceState, shouldBlockWeakerWorkspaceOverwrite } from "../lib/workspacePreservation";
+import { buildWorkspaceRestoreResolverSummary } from "../lib/workspaceRestoreResolver";
+import { cloneAdvancedEvidence, summariseAdvancedEvidence } from "../lib/advancedEvidence";
+import { ADVANCED_FIXTURE_EVIDENCE_HEADERS } from "../lib/advancedEvidenceImport";
+import { buildAdvancedEvidenceImpactSummary } from "../lib/advancedEvidenceImpact";
+import { buildAdvancedDataGate, buildAdvancedDataGateSummary } from "../lib/advancedDataGate";
+import { summariseAdvancedDataCalibration } from "../lib/advancedDataCalibration";
+import {
+  applyAdvancedDataWeightControls,
+  defaultAdvancedDataWeightControls,
+  summariseAdvancedDataIntegration,
+} from "../lib/advancedDataWeightControls";
+import { summariseAdvancedDataWeightSandbox } from "../lib/advancedDataWeightSandbox";
 
 function assertBetween(value: number, min: number, max: number, label: string) {
   assert.ok(
@@ -805,6 +830,18 @@ function runImportPreviewSmokeTests() {
 
   const duplicatePreview = getFixtureBatchPreview([newFixture, { ...newFixture, id: "dupe" }], current, tips, "append");
   assert.equal(duplicatePreview.duplicateImportCount, 1);
+
+  const brandNewCompetitionFixture = createBlankFixture("Round 1", "USL Championship");
+  brandNewCompetitionFixture.id = "usl-new-import";
+  const addNewPreview = getFixtureBatchPreview([brandNewCompetitionFixture], current, tips, "append");
+  assert.deepEqual(addNewPreview.newCompetitions, ["usl championship"]);
+  assert.deepEqual(addNewPreview.existingCompetitions, []);
+  assert.ok(addNewPreview.summaryLines.some((line) => line.includes("New competition")));
+
+  const existingCompetitionPreview = getFixtureBatchPreview([newFixture], current, tips, "append");
+  assert.equal(existingCompetitionPreview.newCompetitions.length, 0);
+  assert.ok(existingCompetitionPreview.existingCompetitions.length > 0);
+  assert.ok(existingCompetitionPreview.warnings.some((warning) => warning.includes("existing competition scope")));
 }
 
 
@@ -864,6 +901,44 @@ function runTeamAliasSmokeTests() {
   );
 }
 
+
+function runCompetitionInsightsSmokeTests() {
+  const finalOne = createBlankFixture("Round 1", "Smoke League");
+  finalOne.id = "smoke-final-1";
+  finalOne.date = "2026-01-01";
+  finalOne.homeTeam = "Lions";
+  finalOne.awayTeam = "Tigers";
+  finalOne.matchResult = { status: "final", homeGoals: 2, awayGoals: 1 };
+  finalOne.homeStats = { ...finalOne.homeStats, played: 3, points: 7, wins: 2, draws: 1, losses: 0, goalsFor: 6, goalsAgainst: 2 };
+  finalOne.awayStats = { ...finalOne.awayStats, played: 3, points: 4, wins: 1, draws: 1, losses: 1, goalsFor: 4, goalsAgainst: 4 };
+
+  const finalTwo = createBlankFixture("Round 2", "Smoke League");
+  finalTwo.id = "smoke-final-2";
+  finalTwo.date = "2026-01-08";
+  finalTwo.homeTeam = "Tigers";
+  finalTwo.awayTeam = "Bears";
+  finalTwo.matchResult = { status: "final", homeGoals: 0, awayGoals: 0 };
+
+  const pending = createBlankFixture("Round 3", "Smoke League");
+  pending.id = "smoke-pending";
+  pending.date = "2026-01-15";
+  pending.homeTeam = "Lions";
+  pending.awayTeam = "Bears";
+
+  const names = getCompetitionNames([finalOne, finalTwo, pending]);
+  assert.deepEqual(names, ["Smoke League"]);
+
+  const insights = summariseCompetition([finalOne, finalTwo, pending], "Smoke League");
+  assert.equal(insights.fixtureCount, 3);
+  assert.equal(insights.finalResultCount, 2);
+  assert.equal(insights.pendingFixtureCount, 1);
+  assert.equal(insights.teamCount, 3);
+  assert.equal(insights.resultStandings[0].team, "Lions");
+  assert.equal(insights.resultStandings[0].points, 3);
+  assert.ok(insights.evidenceStandings.some((row) => row.team === "Lions" && row.points === 7));
+  assert.equal(insights.recentResults.length, 2);
+}
+
 function runLiveFixtureMaintenanceSmokeTests() {
   const now = new Date("2026-07-08T00:00:00.000Z");
   const cutoff = getLiveFixtureStaleCutoffIso(now, 14);
@@ -887,7 +962,1014 @@ function runLiveFixtureMaintenanceSmokeTests() {
   assert.equal(summary.latestUpdatedAt, "2026-07-08T01:00:00.000Z");
 }
 
+
+function runOutcomeProbabilitySmokeTests() {
+  const fixture = fixtures[0];
+  const quality = calculateQualityFromTeamStats(fixture.homeStats, fixture.awayStats);
+  const form = calculateFormFromRecentResults(fixture.homeRecentForm, fixture.awayRecentForm);
+  const availability = calculateAvailabilityFromMissingPlayers(fixture.homeMissingPlayers, fixture.awayMissingPlayers);
+  const context = calculateContextFromFlags(fixture.homeContext, fixture.awayContext, fixture.matchContext);
+  const odds = calculateOddsFromMarket(fixture.oddsMarket);
+  const scoresBeforeConflict = applyCalculatedGaps(
+    fixture.scores,
+    quality.qualityGap,
+    form.recentFormGap,
+    availability.injuryRisk,
+    context.motivationEdge,
+    odds.oddsSupport,
+    0,
+  );
+  const conflict = calculateConflictFromSignals({
+    scores: scoresBeforeConflict,
+    weights: defaultRuleWeights,
+    contextWarnings: context.warnings,
+    oddsWarnings: odds.warnings,
+    volatilityScore: context.volatilityScore,
+    drawProbability: odds.drawProbability,
+    externalFavourite: odds.externalFavourite,
+    favouriteMargin: odds.favouriteMargin,
+  });
+  const finalScores = applyCalculatedGaps(
+    scoresBeforeConflict,
+    quality.qualityGap,
+    form.recentFormGap,
+    availability.injuryRisk,
+    context.motivationEdge,
+    odds.oddsSupport,
+    conflict.conflictScore,
+  );
+  const prediction = runPrediction(finalScores, defaultRuleWeights);
+  const probabilities = calculateOutcomeProbabilities({
+    scores: finalScores,
+    prediction,
+    odds,
+    conflict,
+    weights: defaultRuleWeights,
+  });
+
+  assert.equal(probabilities.home + probabilities.draw + probabilities.away, 100);
+  assert.ok(probabilities.home > probabilities.away, "sample home favourite should have higher home probability than away probability");
+  assert.ok(["low", "medium", "high"].includes(probabilities.confidenceBand));
+  assert.ok(probabilities.evidence.some((item) => item.includes("Final estimated probabilities")));
+
+  const tightReviewPrediction = runPrediction({ ...emptyScores, conflictScore: 5 }, defaultRuleWeights);
+  const tightProbabilities = calculateOutcomeProbabilities({
+    scores: { ...emptyScores, conflictScore: 5 },
+    prediction: tightReviewPrediction,
+    odds: calculateOddsFromMarket({ homeWinProbability: 0, drawProbability: 0, awayWinProbability: 0, sourceLabel: "None" }),
+    conflict: { conflictScore: 5, rawConflictPoints: 5, conflictLevel: "block", failedSignals: 3, cautionSignals: 0, evidence: [], warnings: [], blockers: [] },
+    weights: defaultRuleWeights,
+  });
+  assert.equal(tightProbabilities.home + tightProbabilities.draw + tightProbabilities.away, 100);
+  assert.equal(tightProbabilities.confidenceBand, "low");
+  assert.ok(tightProbabilities.draw >= 30, "high conflict should keep draw/uncertainty elevated");
+
+  // Regression test for a real bug found by brute-force sweeping edge/conflict/
+  // market combinations: a large edge combined with an external market input
+  // that assigns ~0% to away could round to a displayed -1% probability.
+  // This exact combination (edge 25, conflict 2, odds 100/0/0) was one of 81
+  // reachable cases found before the fix to normaliseToHundred's rounding.
+  const extremeEdgePrediction = {
+    homeEdge: 25,
+    awayEdge: -25,
+    confidence: 90,
+    prediction: "Very Strong Home Win" as const,
+    gateStatus: "passed" as const,
+    reviewRequired: false,
+    gates: [],
+    warnings: [],
+  };
+  const extremeOdds = {
+    homeProbability: 100,
+    drawProbability: 0,
+    awayProbability: 0,
+    externalFavourite: "home" as const,
+    favouriteMargin: 100,
+    oddsSupport: 5,
+    evidence: [],
+    warnings: [],
+  };
+  const extremeConflict = {
+    conflictScore: 2,
+    rawConflictPoints: 2,
+    conflictLevel: "caution" as const,
+    failedSignals: 0,
+    cautionSignals: 2,
+    evidence: [],
+    warnings: [],
+    blockers: [],
+  };
+  const extremeProbabilities = calculateOutcomeProbabilities({
+    scores: emptyScores,
+    prediction: extremeEdgePrediction,
+    odds: extremeOdds,
+    conflict: extremeConflict,
+    weights: defaultRuleWeights,
+  });
+  assert.ok(extremeProbabilities.home >= 0, "home probability should never be negative");
+  assert.ok(extremeProbabilities.draw >= 0, "draw probability should never be negative");
+  assert.ok(extremeProbabilities.away >= 0, "away probability should never be negative — this is the exact case that used to round to -1%");
+  assert.equal(extremeProbabilities.home + extremeProbabilities.draw + extremeProbabilities.away, 100);
+}
+
+function runProbabilityCalibrationSmokeTests() {
+  assert.equal(
+    calculateMulticlassBrierScore({ home: 80, draw: 10, away: 10 }, "home"),
+    0.03,
+    "strong correct probability should have low Brier score",
+  );
+  assert.equal(
+    calculateMulticlassBrierScore({ home: 80, draw: 10, away: 10 }, "away"),
+    0.73,
+    "strong wrong probability should have high Brier score",
+  );
+
+  const summary = summariseProbabilityCalibration([
+    {
+      fixture: { ...fixtures[0], id: "cal-1", homeTeam: "Home A", awayTeam: "Away A" },
+      probabilities: {
+        home: 70,
+        draw: 20,
+        away: 10,
+        favourite: "home",
+        spread: 50,
+        confidenceBand: "high",
+        modelOnly: { home: 70, draw: 20, away: 10 },
+        marketBlendUsed: false,
+        evidence: [],
+        warnings: [],
+      },
+      accuracy: {
+        actualOutcome: "home",
+        predictedOutcome: "home",
+        isSettled: true,
+        isTipPublished: true,
+        isCorrect: true,
+        pointsAwarded: 1,
+        evidence: [],
+      },
+    },
+    {
+      fixture: { ...fixtures[0], id: "cal-2", homeTeam: "Home B", awayTeam: "Away B" },
+      probabilities: {
+        home: 72,
+        draw: 18,
+        away: 10,
+        favourite: "home",
+        spread: 54,
+        confidenceBand: "high",
+        modelOnly: { home: 72, draw: 18, away: 10 },
+        marketBlendUsed: false,
+        evidence: [],
+        warnings: [],
+      },
+      accuracy: {
+        actualOutcome: "away",
+        predictedOutcome: "home",
+        isSettled: true,
+        isTipPublished: true,
+        isCorrect: false,
+        pointsAwarded: 0,
+        evidence: [],
+      },
+    },
+  ]);
+
+  assert.equal(summary.settledFixtures, 2);
+  assert.equal(summary.favouriteTips, 2);
+  assert.equal(summary.favouriteHits, 1);
+  assert.equal(summary.favouriteHitRate, 50);
+  assert.equal(summary.calibrationGrade, "insufficient-data");
+  assert.equal(summary.fixturesToReview.length, 1, "high-probability miss should be surfaced for review");
+  assert.ok(summary.averageBrierScore > 0, "calibration summary should calculate Brier score");
+}
+
+
+function runModelTuningRecommendationsSmokeTests() {
+  const basePrediction = {
+    homeEdge: 8,
+    awayEdge: -8,
+    confidence: 82,
+    prediction: "Strong Home Win" as const,
+    gateStatus: "passed" as const,
+    reviewRequired: false,
+    gates: [
+      { id: "quality", name: "Quality Gate", status: "pass" as const, note: "quality supports" },
+      { id: "form", name: "Form Gate", status: "pass" as const, note: "form supports" },
+    ],
+    warnings: [],
+  };
+  const highHomeProbabilities = {
+    home: 70,
+    draw: 20,
+    away: 10,
+    favourite: "home" as const,
+    spread: 50,
+    confidenceBand: "high" as const,
+    modelOnly: { home: 70, draw: 20, away: 10 },
+    marketBlendUsed: false,
+    evidence: [],
+    warnings: [],
+  };
+  const correctAccuracy = {
+    actualOutcome: "home" as const,
+    predictedOutcome: "home" as const,
+    isSettled: true,
+    isTipPublished: true,
+    isCorrect: true,
+    pointsAwarded: 1,
+    evidence: [],
+  };
+  const missedAccuracy = {
+    ...correctAccuracy,
+    actualOutcome: "away" as const,
+    isCorrect: false,
+    pointsAwarded: 0,
+  };
+
+  const items = [
+    { fixture: { ...fixtures[0], id: "tune-1", homeTeam: "Home 1", awayTeam: "Away 1" }, prediction: basePrediction, probabilities: highHomeProbabilities, accuracy: missedAccuracy },
+    { fixture: { ...fixtures[0], id: "tune-2", homeTeam: "Home 2", awayTeam: "Away 2" }, prediction: basePrediction, probabilities: highHomeProbabilities, accuracy: missedAccuracy },
+    { fixture: { ...fixtures[0], id: "tune-3", homeTeam: "Home 3", awayTeam: "Away 3" }, prediction: basePrediction, probabilities: highHomeProbabilities, accuracy: correctAccuracy },
+    { fixture: { ...fixtures[0], id: "tune-4", homeTeam: "Home 4", awayTeam: "Away 4" }, prediction: basePrediction, probabilities: highHomeProbabilities, accuracy: correctAccuracy },
+    { fixture: { ...fixtures[0], id: "tune-5", homeTeam: "Home 5", awayTeam: "Away 5" }, prediction: basePrediction, probabilities: highHomeProbabilities, accuracy: correctAccuracy },
+  ];
+
+  const calibration = summariseProbabilityCalibration(items.map((item) => ({
+    fixture: item.fixture,
+    probabilities: item.probabilities,
+    accuracy: item.accuracy,
+  })));
+  const ruleLearning = calculateRuleLearningSummary(items.map((item) => ({
+    prediction: item.prediction,
+    accuracy: item.accuracy,
+  })));
+  const tuning = summariseModelTuningRecommendations({
+    items,
+    calibration,
+    ruleLearning,
+    ruleWeights: defaultRuleWeights,
+  });
+
+  assert.equal(tuning.settledFixtures, 5);
+  assert.equal(tuning.publishedTips, 5);
+  assert.equal(tuning.highConfidenceMisses, 2);
+  assert.ok(tuning.recommendations.some((recommendation) => recommendation.id === "reduce-strong-favourite-overconfidence"), "high-confidence misses should trigger an overconfidence recommendation");
+  assert.ok(tuning.recommendations.some((recommendation) => recommendation.id === "collect-more-results"), "small samples should still ask for more data");
+  assert.ok(tuning.evidence.some((line) => line.includes("advisory only") || line.includes("does not auto-change")), "tuning summary should make it clear that changes are advisory only");
+}
+
+
+function runTuningSandboxSmokeTests() {
+  const baseFixture = {
+    ...fixtures[0],
+    id: "sandbox-1",
+    matchResult: { status: "final" as const, homeGoals: 2, awayGoals: 0 },
+  };
+  const upsetFixture = {
+    ...fixtures[0],
+    id: "sandbox-2",
+    homeTeam: "Heavy Home",
+    awayTeam: "Upset Away",
+    matchResult: { status: "final" as const, homeGoals: 0, awayGoals: 1 },
+  };
+  const sandboxWeights = {
+    ...defaultRuleWeights,
+    minimumPublishConfidence: 80,
+    reviewConflictThreshold: 1,
+  };
+  const summary = summariseTuningSandbox({
+    fixtures: [baseFixture, upsetFixture],
+    baselineWeights: defaultRuleWeights,
+    sandboxWeights,
+  });
+
+  assert.equal(summary.fixtureCount, 2);
+  assert.equal(summary.settledFixtures, 2);
+  assert.ok(summary.baseline.publishedTips >= summary.sandbox.publishedTips, "stricter sandbox should not publish more tips in this sample");
+  assert.ok(summary.evidence.some((line) => line.includes("what-if") || line.includes("sandbox only")), "sandbox evidence should state it is not applying live changes");
+}
+
+function runTuningPresetSmokeTests() {
+  const aggressive = {
+    ...defaultRuleWeights,
+    qualityGap: 1.5,
+    conflictScore: 0.75,
+  };
+  const preset = createTuningPreset({
+    name: "  Brazil weekly review  ",
+    description: "  Use after P31 sandbox check.  ",
+    weights: aggressive,
+  });
+
+  assert.equal(preset.name, "Brazil weekly review");
+  assert.equal(preset.description, "Use after P31 sandbox check.");
+  assert.equal(preset.weights.qualityGap, 1.5);
+  assert.equal(getPresetWeightChangeCount(preset, defaultRuleWeights), 2);
+
+  const duplicateNamePreset = createTuningPreset({
+    name: "Brazil weekly review",
+    weights: defaultRuleWeights,
+    existingPresets: [preset],
+  });
+  assert.equal(duplicateNamePreset.name, "Brazil weekly review 2");
+
+  const updated = updateTuningPreset({
+    presets: [preset],
+    presetId: preset.id,
+    name: "Conservative review",
+    weights: defaultRuleWeights,
+  });
+  assert.equal(updated[0].name, "Conservative review");
+  assert.equal(updated[0].weights.qualityGap, defaultRuleWeights.qualityGap);
+  assert.ok(updated[0].updatedAt >= preset.updatedAt);
+
+  const cloned = cloneTuningPresets(updated);
+  cloned[0].weights.qualityGap = 0;
+  assert.equal(updated[0].weights.qualityGap, defaultRuleWeights.qualityGap, "cloned presets must not share weight references");
+  assert.equal(deleteTuningPreset(updated, preset.id).length, 0);
+  assert.equal(isTuningPresetArray(updated), true);
+  assert.equal(isTuningPresetArray([{ id: "bad" }]), false);
+}
+
+
+function runModelVersionComparisonSmokeTests() {
+  const conservative = {
+    ...defaultRuleWeights,
+    minimumPublishConfidence: defaultRuleWeights.minimumPublishConfidence + 10,
+    conflictScore: defaultRuleWeights.conflictScore + 0.5,
+  };
+  const entry = createModelChangeLogEntry({
+    reason: "sandbox-apply",
+    label: "Conservative model",
+    beforeWeights: defaultRuleWeights,
+    afterWeights: conservative,
+  });
+  assert.ok(entry, "changed weights should create a comparison source entry");
+  const preset = createTuningPreset({ name: "Preset model", weights: conservative });
+  const targets = buildModelVersionComparisonTargets({ changeLog: [entry], presets: [preset] });
+  assert.ok(targets.some((target) => target.id === "default"), "comparison targets should include defaults");
+  assert.ok(targets.some((target) => target.id === `change-before-${entry.id}`), "comparison targets should include before snapshots");
+  assert.ok(targets.some((target) => target.id === `change-after-${entry.id}`), "comparison targets should include after snapshots");
+  assert.ok(targets.some((target) => target.id === `preset-${preset.id}`), "comparison targets should include presets");
+
+  const summary = summariseModelVersionComparison({
+    fixtures,
+    currentWeights: conservative,
+    comparisonWeights: defaultRuleWeights,
+    target: targets[0],
+  });
+  assert.ok(summary.changedWeightCount >= 2, "comparison should report changed weights");
+  assert.ok(summary.changedWeights.some((item) => item.key === "minimumPublishConfidence"));
+  assert.equal(summary.target.id, "default");
+  assert.ok(summary.evidence.some((line) => line.includes("P34 is read-only")));
+}
+
+function runModelChangeLogSmokeTests() {
+  const conservative = {
+    ...defaultRuleWeights,
+    minimumPublishConfidence: defaultRuleWeights.minimumPublishConfidence + 5,
+    conflictScore: defaultRuleWeights.conflictScore + 0.25,
+  };
+  const changedKeys = getChangedRuleWeightKeys(defaultRuleWeights, conservative);
+  assert.ok(changedKeys.includes("minimumPublishConfidence"), "changed keys should include minimum publish confidence");
+  assert.ok(changedKeys.includes("conflictScore"), "changed keys should include conflict penalty");
+
+  const entry = createModelChangeLogEntry({
+    reason: "sandbox-apply",
+    label: "Test sandbox apply",
+    note: "Regression test entry",
+    beforeWeights: defaultRuleWeights,
+    afterWeights: conservative,
+  });
+  assert.ok(entry, "changed weights should create a log entry");
+  const entries = appendModelChangeLogEntry([], entry);
+  const summary = summariseModelChangeLog(entries);
+  assert.equal(summary.totalEntries, 1);
+  assert.equal(summary.sandboxApplications, 1);
+  assert.equal(summary.latestEntry?.label, "Test sandbox apply");
+  assert.ok(summary.changedKeyCounts.some((item) => item.key === "conflictScore" && item.count === 1));
+
+  const snapshot = createModelChangeLogEntry({
+    reason: "manual-snapshot",
+    label: "Snapshot",
+    beforeWeights: defaultRuleWeights,
+    afterWeights: defaultRuleWeights,
+  });
+  assert.ok(snapshot, "manual snapshots should be allowed even when no weights changed");
+  const withSnapshot = appendModelChangeLogEntry(entries, snapshot);
+  assert.equal(summariseModelChangeLog(withSnapshot).manualSnapshots, 1);
+  assert.equal(isModelChangeLogArray(withSnapshot), true);
+  assert.equal(isModelChangeLogArray([{ id: "bad" }]), false);
+}
+
+
+
+function runCompetitionDataQualitySmokeTests() {
+  const duplicate = createBlankFixture("Round 1");
+  duplicate.id = "quality-duplicate-1";
+  duplicate.competition = "Quality League";
+  duplicate.date = "2026-08-01";
+  duplicate.homeTeam = "Sao Paulo";
+  duplicate.awayTeam = "Gremio";
+  duplicate.matchResult = { status: "final", homeGoals: 2, awayGoals: 1 };
+  duplicate.homeStats = { ...fixtures[0].homeStats };
+  duplicate.awayStats = { ...fixtures[0].awayStats };
+  duplicate.homeRecentForm = [{ result: "W", goalsFor: 2, goalsAgainst: 1 }];
+  duplicate.awayRecentForm = [{ result: "L", goalsFor: 1, goalsAgainst: 2 }];
+
+  const duplicateCopy = { ...duplicate, id: "quality-duplicate-2" };
+  const missing = createBlankFixture("Round 2");
+  missing.id = "quality-missing";
+  missing.competition = "Quality League";
+  missing.date = "";
+  missing.homeTeam = "São Paulo";
+  missing.awayTeam = "TBD";
+  missing.matchResult = { status: "pending", homeGoals: 0, awayGoals: 0 };
+
+  const summary = summariseCompetitionDataQuality(
+    [duplicate, duplicateCopy, missing],
+    [{ fixtureId: "removed-fixture", entrantId: "entrant", pick: "home", confidence: 60 }],
+    "Quality League",
+  );
+
+  assert.equal(summary.fixtureCount, 3);
+  assert.equal(summary.finalResults, 2);
+  assert.ok(summary.duplicateFixtureRows >= 2, "duplicate fixture rows should be flagged");
+  assert.ok(summary.possibleTeamNameVariants >= 1, "accent variants should be flagged");
+  assert.equal(summary.orphanedTips, 1);
+  assert.equal(summary.status, "needs-work");
+  assert.ok(summary.issues.some((issue) => issue.category === "Fixture teams"));
+}
+
+function runWorkspacePreservationSmokeTests() {
+  const richFixtures = cloneFixtures(fixtures);
+  const extraFixture = createBlankFixture("Round 99", "Manual League");
+  extraFixture.id = "manual-preservation-fixture";
+  extraFixture.homeTeam = "Manual Home";
+  extraFixture.awayTeam = "Manual Away";
+  richFixtures.push(extraFixture);
+
+  const weaker = createPersistedState(
+    fixtures.slice(0, 1),
+    fixtures[0].id,
+    "Round 1",
+    defaultRuleWeights,
+    [],
+    [],
+    [],
+    [],
+    [],
+  );
+  const richer = createPersistedState(
+    richFixtures,
+    richFixtures[0].id,
+    "Round 1",
+    defaultRuleWeights,
+    [{ id: "entrant-a", name: "Entrant A" }],
+    [{ fixtureId: extraFixture.id, entrantId: "entrant-a", pick: "home", confidence: 75 }],
+    [],
+    [],
+    [],
+  );
+
+  assert.equal(shouldBlockWeakerWorkspaceOverwrite(weaker, richer), true);
+  assert.equal(chooseSaferWorkspaceState(weaker, richer), richer);
+}
+
+function runWorkspaceRecoveryVaultSmokeTests() {
+  const baseState = createPersistedState(
+    fixtures.slice(0, 2),
+    fixtures[0].id,
+    "Round 1",
+    defaultRuleWeights,
+    [{ id: "entrant-a", name: "Entrant A" }],
+    [],
+    [],
+    [],
+    [],
+  );
+  const richerState = createPersistedState(
+    fixtures.slice(0, 4),
+    fixtures[0].id,
+    "Round 1",
+    defaultRuleWeights,
+    [{ id: "entrant-a", name: "Entrant A" }],
+    [{ fixtureId: fixtures[0].id, entrantId: "entrant-a", pick: "home", confidence: 70 }],
+    [],
+    [],
+    [],
+  );
+
+  const automatic = createWorkspaceRecoverySnapshot(baseState, "Automatic", "automatic");
+  const manual = createWorkspaceRecoverySnapshot(richerState, "Manual", "manual");
+  const vault = addWorkspaceRecoverySnapshot([automatic], manual);
+  const summary = summariseWorkspaceRecoveryVault(vault);
+
+  assert.equal(summary.snapshotCount, 2);
+  assert.equal(summary.manualCount, 1);
+  assert.equal(summary.richestSnapshotId, manual.id);
+  assert.equal(shouldCreateAutomaticWorkspaceSnapshot([automatic], baseState), false);
+  assert.equal(shouldCreateAutomaticWorkspaceSnapshot([automatic], richerState), true);
+
+  const manyAutomatic = Array.from({ length: 14 }, (_, index) =>
+    createWorkspaceRecoverySnapshot(
+      createPersistedState(
+        fixtures.slice(0, Math.max(1, (index % fixtures.length) + 1)),
+        fixtures[0].id,
+        "Round 1",
+        defaultRuleWeights,
+        [],
+        [],
+        [],
+        [],
+        [],
+      ),
+      `Automatic ${index}`,
+      "automatic",
+    ),
+  );
+  assert.ok(pruneWorkspaceRecoveryVault(manyAutomatic).length <= 10);
+
+  // createPersistedState defaults recoverySnapshots to [] when the 10th arg
+  // is omitted -- this is what every existing call site relies on, and it's
+  // what keeps a snapshot's own embedded state from recursively containing
+  // a copy of the vault it's itself a member of.
+  const stateWithoutVaultArg = createPersistedState(
+    fixtures.slice(0, 1), fixtures[0].id, "Round 1", defaultRuleWeights, [], [], [], [], [],
+  );
+  assert.deepEqual(stateWithoutVaultArg.recoverySnapshots, []);
+
+  // Passing a live vault through explicitly (the top-level mirror/storage
+  // path) should actually carry it, proving the field isn't silently dropped.
+  const someSnapshot = createWorkspaceRecoverySnapshot(baseState, "Manual", "manual");
+  const stateWithVaultArg = createPersistedState(
+    fixtures.slice(0, 1), fixtures[0].id, "Round 1", defaultRuleWeights, [], [], [], [], [], defaultAdvancedDataWeightControls, [someSnapshot],
+  );
+  assert.equal(stateWithVaultArg.recoverySnapshots?.length, 1);
+  assert.equal(stateWithVaultArg.recoverySnapshots?.[0].id, someSnapshot.id);
+
+  // Directly demonstrates the anti-nesting pattern useWorkspaceAutosave.ts
+  // follows: build the state that gets *embedded inside a new snapshot*
+  // without the 10th arg, even when a live, non-empty vault exists
+  // elsewhere in the app -- the new snapshot's own state must not carry it.
+  const nextSnapshot = createWorkspaceRecoverySnapshot(stateWithoutVaultArg, "Automatic", "automatic");
+  assert.deepEqual(
+    nextSnapshot.state.recoverySnapshots,
+    [],
+    "a newly created snapshot's embedded state must never carry a copy of the vault, or every snapshot would recursively nest all previous ones",
+  );
+}
+
+function runWorkspaceRestoreResolverSmokeTests() {
+  const baseState = createPersistedState(
+    fixtures.slice(0, 1),
+    fixtures[0].id,
+    "Round 1",
+    defaultRuleWeights,
+    [],
+    [],
+    [],
+    [],
+    [],
+  );
+  const cloudState = createPersistedState(
+    fixtures,
+    fixtures[0].id,
+    "Round 1",
+    defaultRuleWeights,
+    [],
+    [],
+    [],
+    [],
+    [],
+  );
+  const recovery = createWorkspaceRecoverySnapshot(cloudState, "Rich cloud-era backup", "manual");
+  const resolver = buildWorkspaceRestoreResolverSummary({
+    currentState: baseState,
+    cloudState,
+    localCandidates: [{
+      key: "tipping-gates-app-test-state",
+      state: baseState,
+      fixtureCount: baseState.fixtures.length,
+      competitionCount: 1,
+      savedAtMs: Date.parse(baseState.savedAt),
+      score: 100,
+    }],
+    recoverySnapshots: [recovery],
+  });
+
+  assert.ok(resolver.candidates.length >= 3);
+  assert.ok(resolver.recommendedLabel.includes("Supabase") || resolver.recommendedLabel.includes("Recovery"));
+  assert.ok(resolver.candidates.some((candidate) => candidate.sourceType === "cloud"));
+}
+
+
+function runAdvancedEvidenceSmokeTests() {
+  const emptySummary = summariseAdvancedEvidence(fixtures);
+  assert.equal(emptySummary.fixtureCount, fixtures.length);
+  assert.equal(emptySummary.fixturesWithAdvancedEvidence, 0);
+  assert.ok(emptySummary.categories.some((category) => category.id === "xg"));
+
+  const advancedFixtures = cloneFixtures(fixtures);
+  advancedFixtures[0] = {
+    ...advancedFixtures[0],
+    advancedEvidence: {
+      home: {
+        expectedGoalsFor: 1.9,
+        expectedGoalsAgainst: 0.8,
+        recentOpponentAveragePointsPerGame: 1.6,
+        daysSinceLastMatch: 5,
+        missingStarters: 1,
+        setPieceGoalsFor: 7,
+        yellowCardsPerMatch: 1.8,
+        stability: "stable",
+      },
+      away: {
+        expectedGoalsFor: 0.9,
+        matchesLast14Days: 4,
+        missingGoalkeepers: 1,
+        cornersAgainstPerMatch: 5.4,
+        redCardsPerMatch: 0.1,
+        stability: "watch",
+      },
+      match: {
+        openingHomeProbability: 55,
+        currentHomeProbability: 61,
+        marketMovementDirection: "home-shortening",
+        marketMovementStrength: 6,
+      },
+    },
+  };
+
+  const evidenceCopy = cloneAdvancedEvidence(advancedFixtures[0].advancedEvidence);
+  assert.equal(evidenceCopy?.home?.expectedGoalsFor, 1.9);
+  const summary = summariseAdvancedEvidence(advancedFixtures);
+  assert.equal(summary.fixturesWithAdvancedEvidence, 1);
+  assert.ok(summary.coveragePct > 0);
+  assert.ok(summary.categories.find((category) => category.id === "market-movement")?.available === 1);
+
+  const exportedCsv = exportFixturesToCsv(advancedFixtures);
+  assert.ok(ADVANCED_FIXTURE_EVIDENCE_HEADERS.every((header) => exportedCsv.split("\n")[0].includes(header)));
+  const reimported = importFixturesFromCsv(exportedCsv);
+  assert.equal(reimported.fixtures[0].advancedEvidence?.home?.expectedGoalsFor, 1.9);
+  assert.equal(reimported.fixtures[0].advancedEvidence?.away?.missingGoalkeepers, 1);
+  assert.equal(reimported.fixtures[0].advancedEvidence?.match?.marketMovementDirection, "home-shortening");
+
+  const workbookTemplate = getCustomWorkbookTemplate();
+  assert.ok(workbookTemplate.teamsHeaders.includes("xg_for"));
+  assert.ok(workbookTemplate.fixturesHeaders.includes("market_movement_direction"));
+
+  const teamsCsv = [
+    "competition,season,team,played,points,wins,draws,losses,gf,ga,form,availability_risk,notes,xg_for,xg_against,travel_burden,missing_starters,team_stability",
+    "Advanced League,2026,Home FC,10,20,6,2,2,18,9,W:2-1;W:1-0,0,,1.8,0.9,low,1,stable",
+    "Advanced League,2026,Away FC,10,15,4,3,3,14,12,D:1-1;L:0-1,0,,1.1,1.2,moderate,2,watch",
+  ].join("\n");
+  const fixturesCsv = [
+    "competition,season,round,date,home_team,away_team,home_goals,away_goals,status,neutral_venue,odds_home_pct,odds_draw_pct,odds_away_pct,odds_source,head_to_head_edge,other_stats_edge,notes,opening_home_probability,current_home_probability,market_movement_direction,market_movement_strength,advanced_data_source",
+    "Advanced League,2026,Round 1,2026-08-01,Home FC,Away FC,,,scheduled,false,45,28,27,Manual,0,0,,40,46,home-shortening,6,Analyst sheet",
+  ].join("\n");
+  const workbookImport = importCustomCompetitionFromWorkbookSheets(teamsCsv, fixturesCsv);
+  assert.equal(workbookImport.fixtures[0].advancedEvidence?.home?.expectedGoalsFor, 1.8);
+  assert.equal(workbookImport.fixtures[0].advancedEvidence?.away?.travelBurden, "moderate");
+  assert.equal(workbookImport.fixtures[0].advancedEvidence?.match?.currentHomeProbability, 46);
+}
+
+
+function runAdvancedEvidenceImpactSmokeTests() {
+  const advancedFixtures = cloneFixtures(fixtures);
+  advancedFixtures[0] = {
+    ...advancedFixtures[0],
+    advancedEvidence: {
+      home: {
+        expectedGoalsFor: 2.1,
+        expectedGoalsAgainst: 0.7,
+        recentOpponentAveragePointsPerGame: 1.8,
+        daysSinceLastMatch: 6,
+        missingStarters: 0,
+        setPieceGoalsFor: 8,
+        setPieceGoalsAgainst: 2,
+        cornersForPerMatch: 6.4,
+        cornersAgainstPerMatch: 3.1,
+        yellowCardsPerMatch: 1.2,
+        stability: "stable",
+      },
+      away: {
+        expectedGoalsFor: 0.8,
+        expectedGoalsAgainst: 1.5,
+        recentOpponentAveragePointsPerGame: 1.1,
+        daysSinceLastMatch: 2,
+        matchesLast14Days: 5,
+        travelBurden: "high",
+        missingStarters: 3,
+        missingGoalkeepers: 1,
+        setPieceGoalsFor: 1,
+        setPieceGoalsAgainst: 7,
+        cornersForPerMatch: 3.2,
+        cornersAgainstPerMatch: 6.1,
+        yellowCardsPerMatch: 3.3,
+        redCardsPerMatch: 0.2,
+        stability: "volatile",
+      },
+      match: {
+        marketMovementDirection: "home-shortening",
+        marketMovementStrength: 7,
+        weatherDisruptionRisk: true,
+      },
+    },
+  };
+
+  const summary = buildAdvancedEvidenceImpactSummary(advancedFixtures.map((fixture) => ({
+    fixture,
+    prediction: { label: "Strong Home Win", pick: "home", confidence: 70 },
+  })));
+
+  assert.equal(summary.fixtureCount, advancedFixtures.length);
+  assert.equal(summary.fixturesWithAdvancedEvidence, 1);
+  assert.ok(summary.signalCount >= 5, "advanced evidence should create multiple impact signals");
+  assert.ok(summary.strongSignalCount >= 1, "advanced evidence should flag at least one strong signal");
+  assert.ok(summary.categoryCounts.some((item) => item.category === "xG edge"));
+  assert.ok(summary.topSignals.some((signal) => signal.category === "Market movement"));
+}
+
+
+function runAdvancedDataGateSmokeTests() {
+  const advancedFixture: Fixture = {
+    ...fixtures[0],
+    id: "advanced-gate-1",
+    advancedEvidence: {
+      home: {
+        recentExpectedGoalsFor: 2.1,
+        recentExpectedGoalsAgainst: 0.8,
+        recentOpponentAveragePointsPerGame: 1.9,
+        daysSinceLastMatch: 6,
+        missingStarters: 0,
+        setPieceGoalsFor: 4,
+        cornersForPerMatch: 6,
+        yellowCardsPerMatch: 1.2,
+      },
+      away: {
+        recentExpectedGoalsFor: 1.0,
+        recentExpectedGoalsAgainst: 1.7,
+        recentOpponentAveragePointsPerGame: 1.1,
+        daysSinceLastMatch: 2,
+        matchesLast7Days: 2,
+        travelBurden: "high",
+        missingStarters: 2,
+        missingGoalkeepers: 1,
+        setPieceGoalsAgainst: 3,
+        cornersAgainstPerMatch: 5,
+        yellowCardsPerMatch: 1.4,
+        redCardsPerMatch: 0,
+      },
+      match: {
+        marketMovementDirection: "home-shortening",
+        marketMovementStrength: 6,
+      },
+    },
+  };
+
+  const gate = buildAdvancedDataGate({ fixture: advancedFixture, prediction: { label: "Strong Home Win", pick: "home", confidence: 74 } });
+  assert.equal(gate.verdict, "supports");
+  assert.ok(gate.score > 0, "home-supporting advanced evidence should produce positive gate score");
+  assert.ok(gate.signalCount >= 5, "advanced data gate should generate multiple signals");
+  assert.ok(gate.recommendations.some((recommendation) => recommendation.includes("Advanced data supports")));
+
+  const summary = buildAdvancedDataGateSummary([{ fixture: advancedFixture, prediction: { label: "Strong Home Win", pick: "home", confidence: 74 } }]);
+  assert.equal(summary.fixtureCount, 1);
+  assert.equal(summary.fixturesWithGateData, 1);
+  assert.equal(summary.supportsCount, 1);
+  assert.ok(summary.topGateResults.length === 1);
+
+  const emptyGate = buildAdvancedDataGate({ fixture: { ...fixtures[0], id: "advanced-gate-empty", advancedEvidence: undefined }, prediction: { label: "Strong Home Win" } });
+  assert.equal(emptyGate.verdict, "insufficient-data");
+}
+
+
+function runAdvancedDataWeightControlsSmokeTests() {
+  const fixture = cloneFixtures(fixtures)[0];
+  fixture.advancedEvidence = {
+    home: {
+      recentExpectedGoalsFor: 2.4,
+      recentExpectedGoalsAgainst: 0.8,
+      recentOpponentAveragePointsPerGame: 1.8,
+      daysSinceLastMatch: 7,
+      matchesLast7Days: 1,
+      setPieceGoalsFor: 4,
+      setPieceGoalsAgainst: 1,
+    },
+    away: {
+      recentExpectedGoalsFor: 0.8,
+      recentExpectedGoalsAgainst: 1.9,
+      recentOpponentAveragePointsPerGame: 0.9,
+      daysSinceLastMatch: 2,
+      matchesLast7Days: 3,
+      missingKeyAttackers: 1,
+      missingKeyDefenders: 1,
+      setPieceGoalsFor: 1,
+      setPieceGoalsAgainst: 4,
+    },
+    match: { marketMovementDirection: "home-shortening", marketMovementStrength: 6 },
+  };
+  const basePrediction = runPrediction(fixture.scores, defaultRuleWeights);
+
+  const reviewOnly = applyAdvancedDataWeightControls({
+    fixture,
+    prediction: basePrediction,
+    controls: defaultAdvancedDataWeightControls,
+    weights: defaultRuleWeights,
+  });
+  assert.equal(reviewOnly.prediction.confidence, basePrediction.confidence);
+  assert.equal(reviewOnly.integration.applied, false);
+
+  const enabled = applyAdvancedDataWeightControls({
+    fixture,
+    prediction: basePrediction,
+    controls: {
+      enabled: true,
+      mode: "confidence-only",
+      maxConfidenceAdjustment: 3,
+      minimumSignalsRequired: 2,
+      allowReviewEscalation: true,
+    },
+    weights: defaultRuleWeights,
+  });
+  assert.equal(enabled.prediction.homeEdge, basePrediction.homeEdge);
+  assert.ok(Math.abs(enabled.prediction.confidence - basePrediction.confidence) <= 3);
+  assert.ok(enabled.integration.gateResult.signalCount >= 2);
+
+  const summary = summariseAdvancedDataIntegration([reviewOnly.integration, enabled.integration], {
+    enabled: true,
+    mode: "confidence-only",
+    maxConfidenceAdjustment: 3,
+    minimumSignalsRequired: 2,
+    allowReviewEscalation: true,
+  });
+  assert.equal(summary.enabled, true);
+  assert.ok(summary.fixtureCount === 2);
+}
+
+function runAdvancedDataWeightSandboxSmokeTests() {
+  const fixture = cloneFixtures(fixtures)[0];
+  fixture.id = "advanced-weight-sandbox-1";
+  fixture.matchResult = { status: "final", homeGoals: 2, awayGoals: 0 };
+  fixture.advancedEvidence = {
+    home: {
+      recentExpectedGoalsFor: 2.4,
+      recentExpectedGoalsAgainst: 0.7,
+      recentOpponentAveragePointsPerGame: 1.8,
+      daysSinceLastMatch: 7,
+      setPieceGoalsFor: 4,
+    },
+    away: {
+      recentExpectedGoalsFor: 0.9,
+      recentExpectedGoalsAgainst: 1.9,
+      recentOpponentAveragePointsPerGame: 0.8,
+      daysSinceLastMatch: 2,
+      matchesLast7Days: 3,
+      missingKeyAttackers: 1,
+      missingKeyDefenders: 1,
+      setPieceGoalsAgainst: 4,
+    },
+    match: { marketMovementDirection: "home-shortening", marketMovementStrength: 6 },
+  };
+  const basePrediction = runPrediction(fixture.scores, defaultRuleWeights);
+  const reviewOnly = applyAdvancedDataWeightControls({
+    fixture,
+    prediction: basePrediction,
+    controls: defaultAdvancedDataWeightControls,
+    weights: defaultRuleWeights,
+  });
+  const enabledControls = {
+    enabled: true,
+    mode: "confidence-only" as const,
+    maxConfidenceAdjustment: 3,
+    minimumSignalsRequired: 2,
+    allowReviewEscalation: true,
+  };
+  const enabled = applyAdvancedDataWeightControls({
+    fixture,
+    prediction: basePrediction,
+    controls: enabledControls,
+    weights: defaultRuleWeights,
+  });
+  const baselineAccuracy = calculateResultAccuracy(reviewOnly.prediction, fixture.matchResult);
+  const proposedAccuracy = calculateResultAccuracy(enabled.prediction, fixture.matchResult);
+  const sandbox = summariseAdvancedDataWeightSandbox([
+    {
+      fixture,
+      baselinePrediction: reviewOnly.prediction,
+      baselineAccuracy,
+      baselineIntegration: reviewOnly.integration,
+      proposedPrediction: enabled.prediction,
+      proposedAccuracy,
+      proposedIntegration: enabled.integration,
+    },
+  ], enabledControls);
+  assert.equal(sandbox.fixtureCount, 1);
+  assert.equal(sandbox.settledFixtureCount, 1);
+  assert.ok(sandbox.confidenceMovedCount >= 1, "sandbox should count confidence-only movement");
+  assert.equal(sandbox.proposedEnabled, true);
+  assert.ok(sandbox.outcomes.length >= 1);
+}
+
+function runAdvancedDataCalibrationSmokeTests() {
+  const advancedFixture: Fixture = {
+    ...fixtures[0],
+    id: "advanced-calibration-1",
+    matchResult: { status: "final", homeGoals: 2, awayGoals: 1 },
+    advancedEvidence: {
+      home: {
+        recentExpectedGoalsFor: 2.1,
+        recentExpectedGoalsAgainst: 0.8,
+        recentOpponentAveragePointsPerGame: 1.9,
+        daysSinceLastMatch: 6,
+        missingStarters: 0,
+        setPieceGoalsFor: 4,
+        cornersForPerMatch: 6,
+      },
+      away: {
+        recentExpectedGoalsFor: 1.0,
+        recentExpectedGoalsAgainst: 1.7,
+        recentOpponentAveragePointsPerGame: 1.1,
+        daysSinceLastMatch: 2,
+        matchesLast7Days: 2,
+        travelBurden: "high",
+        missingStarters: 2,
+        missingGoalkeepers: 1,
+        setPieceGoalsAgainst: 3,
+        cornersAgainstPerMatch: 5,
+      },
+      match: {
+        marketMovementDirection: "home-shortening",
+        marketMovementStrength: 6,
+      },
+    },
+  };
+  const prediction = runPrediction({
+    qualityGap: 4,
+    homeAdvantage: 2,
+    recentFormGap: 2,
+    headToHeadEdge: 0,
+    injuryRisk: -1,
+    motivationEdge: 1,
+    otherStatsEdge: 0,
+    oddsSupport: 1,
+    conflictScore: 0,
+  }, defaultRuleWeights);
+  const accuracy = calculateResultAccuracy(prediction, advancedFixture.matchResult);
+  const summary = summariseAdvancedDataCalibration([{ fixture: advancedFixture, prediction, accuracy }]);
+
+  assert.equal(summary.fixtureCount, 1);
+  assert.equal(summary.settledFixtureCount, 1);
+  assert.equal(summary.fixturesWithAdvancedGateData, 1);
+  assert.ok(summary.supportiveSignalHitRatePct >= 0);
+  assert.ok(summary.recommendation.length > 0);
+  assert.ok(summary.notes.some((note) => note.includes("does not auto-retune")));
+}
+
+function runReleaseChecklistSmokeTests() {
+  const summary = buildReleaseChecklist({
+    fixtureCount: fixtures.length,
+    competitionCount: getCompetitionNames(fixtures).length,
+    entrantCount: 3,
+    aliasRuleCount: 5,
+    tuningPresetCount: 2,
+    modelChangeLogCount: 1,
+    hasSupabaseConfig: false,
+  });
+
+  assert.equal(summary.version, "0.45.0");
+  assert.equal(summary.patch, "P45");
+  assert.ok(summary.deploymentItems.some((item) => item.id === "lockfile" && item.status === "pass"));
+  assert.ok(summary.deploymentItems.some((item) => item.id === "supabase" && item.status === "warn"));
+  assert.equal(summary.standingItems.length, 4);
+  assert.ok(summary.standingItems.every((item) => item.state === "left-alone"));
+
+  const counts = countChecklistStatuses(summary.deploymentItems);
+  assert.ok(counts.pass >= 2, "release checklist should include passing deployment checks");
+  assert.ok(counts.warn >= 1, "release checklist should flag missing Supabase config as a check item");
+}
+
 runQualityAndPredictionSmokeTest();
+runOutcomeProbabilitySmokeTests();
+runProbabilityCalibrationSmokeTests();
+runModelTuningRecommendationsSmokeTests();
+runTuningSandboxSmokeTests();
+runTuningPresetSmokeTests();
+runModelChangeLogSmokeTests();
+runModelVersionComparisonSmokeTests();
+runReleaseChecklistSmokeTests();
+runAdvancedEvidenceSmokeTests();
+runAdvancedEvidenceImpactSmokeTests();
+runAdvancedDataGateSmokeTests();
+runAdvancedDataWeightControlsSmokeTests();
+runAdvancedDataWeightSandboxSmokeTests();
+runAdvancedDataCalibrationSmokeTests();
+runWorkspaceRecoveryVaultSmokeTests();
+runWorkspaceRestoreResolverSmokeTests();
+runWorkspacePreservationSmokeTests();
+runCompetitionDataQualitySmokeTests();
 runDirectionalConversionSmokeTests();
 runAvailabilityAndConflictSmokeTests();
 runResultAndLearningSmokeTests();
@@ -900,7 +1982,54 @@ runLiveFixtureMaintenanceSmokeTests();
 runCustomCompetitionImportSmokeTests();
 runImportPreviewSmokeTests();
 runTeamAliasSmokeTests();
+async function runServerAuthSmokeTests() {
+  const originalUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const originalKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const originalAdminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+
+  try {
+    // When Supabase isn't configured at all, there's no auth mechanism
+    // available anywhere in the app -- this must fail open, or the app
+    // (including the owner) would be permanently locked out with no way
+    // to ever authenticate.
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    delete process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+    const unconfiguredResult = await verifyRequestSession(new Request("http://localhost/api/test"));
+    assert.equal(unconfiguredResult, true, "should fail open when Supabase is not configured at all");
+
+    // Supabase configured, but no admin email designated yet -- must fail
+    // closed. Letting any signed-in account through here would defeat the
+    // single-admin model this check exists to enforce.
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-anon-key";
+    const noAdminEmailResult = await verifyRequestSession(
+      new Request("http://localhost/api/test", { headers: { authorization: "Bearer sometoken" } }),
+    );
+    assert.equal(noAdminEmailResult, false, "should fail closed when configured but no admin email is designated");
+
+    // Fully configured, but no Authorization header present -- fail closed.
+    process.env.NEXT_PUBLIC_ADMIN_EMAIL = "admin@example.com";
+    const noHeaderResult = await verifyRequestSession(new Request("http://localhost/api/test"));
+    assert.equal(noHeaderResult, false, "should fail closed when configured but no Authorization header is sent");
+  } finally {
+    if (originalUrl === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    else process.env.NEXT_PUBLIC_SUPABASE_URL = originalUrl;
+    if (originalKey === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    else process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = originalKey;
+    if (originalAdminEmail === undefined) delete process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+    else process.env.NEXT_PUBLIC_ADMIN_EMAIL = originalAdminEmail;
+  }
+}
+
+runCompetitionInsightsSmokeTests();
 runQuickPredictionSmokeTests();
 runTennisScoringSmokeTests();
 
-console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, custom competition import, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns, import previews, team aliases and tennis scoring engine.");
+(async () => {
+  await runServerAuthSmokeTests();
+  console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, custom competition import, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns, import previews, team aliases, competition insights, P28 outcome probabilities, P29 probability calibration, P30 model tuning recommendations, P31 tuning sandbox, P32 tuning presets, P33 model change log, P34 model version comparison, P36-P40 release checklist, P37 data quality, P38 workspace preservation, P39 recovery vault, P40 restore resolver, P41/P42 advanced evidence schema/imports, P43 advanced evidence impact signals, P44 advanced data gate, P45 advanced data calibration, P46 advanced data weight controls, P47 advanced data weight sandbox, server-side auth gate and tennis scoring engine.");
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

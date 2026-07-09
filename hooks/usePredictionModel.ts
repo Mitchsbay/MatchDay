@@ -16,8 +16,21 @@ import {
   calculateRuleLearningSummary,
   runPrediction,
 } from "../lib/scoringEngine";
+import { calculateOutcomeProbabilities } from "../lib/probabilityModel";
+import { summariseProbabilityCalibration } from "../lib/probabilityCalibration";
+import {
+  applyAdvancedDataWeightControls,
+  normaliseAdvancedDataWeightControls,
+  summariseAdvancedDataIntegration,
+  type AdvancedDataWeightControls,
+} from "../lib/advancedDataWeightControls";
+import { summariseAdvancedDataWeightSandbox } from "../lib/advancedDataWeightSandbox";
 
-export function calculateFixturePrediction(fixture: Fixture, ruleWeights: RuleWeights) {
+export function calculateFixturePrediction(
+  fixture: Fixture,
+  ruleWeights: RuleWeights,
+  advancedDataControls?: Partial<AdvancedDataWeightControls>,
+) {
   const quality = calculateQualityFromTeamStats(fixture.homeStats, fixture.awayStats);
   const form = calculateFormFromRecentResults(fixture.homeRecentForm, fixture.awayRecentForm);
   const availability = calculateAvailabilityFromMissingPlayers(
@@ -58,11 +71,25 @@ export function calculateFixturePrediction(fixture: Fixture, ruleWeights: RuleWe
     odds.oddsSupport,
     conflict.conflictScore,
   );
-  const prediction = runPrediction(scores, ruleWeights);
+  const basePrediction = runPrediction(scores, ruleWeights);
+  const { prediction, integration: advancedDataIntegration } = applyAdvancedDataWeightControls({
+    fixture,
+    prediction: basePrediction,
+    controls: advancedDataControls,
+    weights: ruleWeights,
+  });
+  const probabilities = calculateOutcomeProbabilities({
+    scores,
+    prediction,
+    odds,
+    conflict,
+    weights: ruleWeights,
+  });
   const accuracy = calculateResultAccuracy(prediction, fixture.matchResult);
 
   return {
     accuracy,
+    advancedDataIntegration,
     availability,
     confidence: prediction.confidence,
     conflict,
@@ -70,26 +97,32 @@ export function calculateFixturePrediction(fixture: Fixture, ruleWeights: RuleWe
     form,
     odds,
     prediction,
+    probabilities,
     quality,
     scores,
   };
 }
 
-export function usePredictionModel(fixtures: Fixture[], activeFixtureId: string, ruleWeights: RuleWeights) {
+export function usePredictionModel(
+  fixtures: Fixture[],
+  activeFixtureId: string,
+  ruleWeights: RuleWeights,
+  advancedDataControls?: Partial<AdvancedDataWeightControls>,
+) {
   const activeFixture = fixtures.find((fixture) => fixture.id === activeFixtureId) ?? fixtures[0];
 
   const activePrediction = useMemo(
-    () => calculateFixturePrediction(activeFixture, ruleWeights),
-    [activeFixture, ruleWeights],
+    () => calculateFixturePrediction(activeFixture, ruleWeights, advancedDataControls),
+    [activeFixture, ruleWeights, advancedDataControls],
   );
 
   const computedFixtureResults = useMemo(
     () =>
       fixtures.map((fixture) => ({
         fixture,
-        ...calculateFixturePrediction(fixture, ruleWeights),
+        ...calculateFixturePrediction(fixture, ruleWeights, advancedDataControls),
       })),
-    [fixtures, ruleWeights],
+    [fixtures, ruleWeights, advancedDataControls],
   );
 
   const accuracySummary = useMemo(
@@ -112,11 +145,58 @@ export function usePredictionModel(fixtures: Fixture[], activeFixtureId: string,
     [computedFixtureResults],
   );
 
+
+  const advancedDataIntegrationSummary = useMemo(
+    () =>
+      summariseAdvancedDataIntegration(
+        computedFixtureResults.map((item) => item.advancedDataIntegration),
+        advancedDataControls,
+      ),
+    [computedFixtureResults, advancedDataControls],
+  );
+
+  const advancedDataWeightSandboxSummary = useMemo(() => {
+    const normalised = normaliseAdvancedDataWeightControls(advancedDataControls);
+    const proposedControls = { ...normalised, enabled: true, mode: "confidence-only" as const };
+    const reviewOnlyControls = { ...normalised, enabled: false, mode: "review-only" as const };
+    return summariseAdvancedDataWeightSandbox(
+      fixtures.map((fixture) => {
+        const baseline = calculateFixturePrediction(fixture, ruleWeights, reviewOnlyControls);
+        const proposed = calculateFixturePrediction(fixture, ruleWeights, proposedControls);
+        return {
+          fixture,
+          baselinePrediction: baseline.prediction,
+          baselineAccuracy: baseline.accuracy,
+          baselineIntegration: baseline.advancedDataIntegration,
+          proposedPrediction: proposed.prediction,
+          proposedAccuracy: proposed.accuracy,
+          proposedIntegration: proposed.advancedDataIntegration,
+        };
+      }),
+      proposedControls,
+    );
+  }, [fixtures, ruleWeights, advancedDataControls]);
+
+  const probabilityCalibration = useMemo(
+    () =>
+      summariseProbabilityCalibration(
+        computedFixtureResults.map((item) => ({
+          fixture: item.fixture,
+          probabilities: item.probabilities,
+          accuracy: item.accuracy,
+        })),
+      ),
+    [computedFixtureResults],
+  );
+
   return {
     activeFixture,
     accuracySummary,
+    advancedDataIntegrationSummary,
+    advancedDataWeightSandboxSummary,
     computedFixtureResults,
     ruleLearning,
+    probabilityCalibration,
     ...activePrediction,
   };
 }

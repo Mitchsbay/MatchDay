@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import type {
   TennisFormResult,
   TennisFormGapResult,
@@ -87,7 +88,7 @@ function PlayerPicker(props: {
   );
 }
 
-export function TennisQuickPredictionPanel() {
+export function TennisQuickPredictionPanel(props: { session: Session | null }) {
   const [tour, setTour] = useState<TennisTour>("atp");
   const [players, setPlayers] = useState<TennisPlayerSummary[]>([]);
   const [isLoadingPlayers, setIsLoadingPlayers] = useState(false);
@@ -106,11 +107,18 @@ export function TennisQuickPredictionPanel() {
 
   useEffect(() => {
     let cancelled = false;
+    if (!props.session) {
+      setPlayers([]);
+      setPlayersMessage("Sign in to load rankings — tennis predictions use a metered external API and are limited to signed-in use.");
+      return;
+    }
     setIsLoadingPlayers(true);
     setPlayerA(null);
     setPlayerB(null);
     setResult(null);
-    fetch(`/api/tennis/players?tour=${tour}`)
+    fetch(`/api/tennis/players?tour=${tour}`, {
+      headers: { authorization: `Bearer ${props.session.access_token}` },
+    })
       .then((res) => res.json())
       .then((payload) => {
         if (cancelled) return;
@@ -131,9 +139,13 @@ export function TennisQuickPredictionPanel() {
     return () => {
       cancelled = true;
     };
-  }, [tour]);
+  }, [tour, props.session]);
 
   async function getPrediction() {
+    if (!props.session) {
+      setPredictionMessage("Sign in to get a prediction.");
+      return;
+    }
     if (!playerA || !playerB) {
       setPredictionMessage("Select both players first.");
       return;
@@ -151,7 +163,10 @@ export function TennisQuickPredictionPanel() {
       const hasServeStatsB = serveStatsB.firstServeInPct > 0 || serveStatsB.firstServeWinPct > 0 || serveStatsB.secondServeWinPct > 0;
       const res = await fetch("/api/tennis/matchup", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${props.session.access_token}`,
+        },
         body: JSON.stringify({
           tour,
           playerA,
@@ -291,7 +306,7 @@ export function TennisQuickPredictionPanel() {
       </div>
 
       <div className="actions">
-        <button className="primary" onClick={getPrediction} disabled={isPredicting || !playerA || !playerB}>
+        <button className="primary" onClick={getPrediction} disabled={isPredicting || !playerA || !playerB || !props.session}>
           {isPredicting ? "Working…" : "Get prediction"}
         </button>
       </div>

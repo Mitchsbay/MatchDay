@@ -24,6 +24,7 @@ import {
   TeamStats,
   RuleWeights,
   calculateAccuracySummary,
+  calculateRuleLearningSummary,
   defaultRuleWeights,
 } from "../lib/scoringEngine";
 import { createBrowserSupabaseClient } from "../lib/supabaseClient";
@@ -33,10 +34,11 @@ import { useWorkspaceAutosave } from "../hooks/useWorkspaceAutosave";
 import { useWorkspaceCloudSync } from "../hooks/useWorkspaceCloudSync";
 import { FixtureList } from "../components/FixtureList";
 import { RoundManagement } from "../components/RoundManagement";
-import { WorkspacePersistencePanel, CloudSyncPanel, CustomCompetitionImportPanel, FixtureCsvPanel, FixtureAutomationPanel, LiveFixturesPanel, LiveFixtureMaintenancePanel, TeamAliasManagerPanel, type LiveFixtureAdminStatus } from "../components/WorkspacePanels";
-import { AccuracyDashboard, EvidenceReadinessPanel, LeaderboardPanel, RuleLearningPanel, RuleWeightTuningPanel } from "../components/DashboardPanels";
+import { WorkspacePersistencePanel, WorkspaceRecoveryVaultPanel, WorkspaceRestoreResolverPanel, CloudSyncPanel, CustomCompetitionImportPanel, FixtureCsvPanel, FixtureAutomationPanel, LiveFixturesPanel, LiveFixtureMaintenancePanel, TeamAliasManagerPanel, type LiveFixtureAdminStatus } from "../components/WorkspacePanels";
+import { AccuracyDashboard, AdvancedDataCalibrationPanel, AdvancedDataGatePanel, AdvancedDataWeightControlsPanel, AdvancedDataWeightSandboxPanel, AdvancedEvidenceImpactPanel, AdvancedEvidencePanel, CompetitionDataQualityPanel, CompetitionInsightsPanel, EvidenceReadinessPanel, LeaderboardPanel, ModelTuningRecommendationsPanel, ModelVersionComparisonPanel, ProbabilityCalibrationPanel, ReleaseChecklistPanel, RuleLearningPanel, RuleWeightTuningPanel, TuningSandboxPanel } from "../components/DashboardPanels";
 import { PredictionSummaryPanel, FixtureDetailsPanel, EntrantsPicksPanel, ResultInputsPanel } from "../components/FixturePanels";
 import { QuickPredictionPanel } from "../components/QuickPredictionPanel";
+import { AuthGatePanel } from "../components/AuthGatePanel";
 import { TennisQuickPredictionPanel } from "../components/TennisPanels";
 import { TeamStrengthInputsPanel, RecentFormInputsPanel, AvailabilityInputsPanel, ContextInputsPanel, OddsInputsPanel, GateEvidencePanels, ManualGateInputsPanel, PredictionGatesPanel } from "../components/EvidenceInputPanels";
 import {
@@ -47,6 +49,8 @@ import {
   cloneFixtures,
   cloneUserTips,
   createBlankFixture,
+  createPersistedState,
+  discoverLocalWorkspaceCandidates,
   getActualOutcomeFromScore,
   getFixtureBatchPreview,
   getTipFor,
@@ -64,6 +68,26 @@ import {
 } from "../lib/adminSecretStorage";
 import { auditFixtureEvidence, summariseEvidenceAudits } from "../lib/evidenceAudit";
 import { DEFAULT_TEAM_ALIAS_RULES, TeamAliasRule, applyTeamAliasesToFixtures, cloneTeamAliases, detectTeamNameIssues } from "../lib/teamAliases";
+import { getCompetitionNames, summariseCompetition } from "../lib/competitionInsights";
+import { summariseProbabilityCalibration } from "../lib/probabilityCalibration";
+import { summariseModelTuningRecommendations } from "../lib/modelTuningRecommendations";
+import { summariseTuningSandbox } from "../lib/tuningSandbox";
+import { buildModelVersionComparisonTargets, summariseModelVersionComparison } from "../lib/modelVersionComparison";
+import { buildReleaseChecklist } from "../lib/releaseChecklist";
+import { buildWorkspaceRestoreResolverSummary } from "../lib/workspaceRestoreResolver";
+import { summariseCompetitionDataQuality } from "../lib/competitionDataQuality";
+import { summariseAdvancedEvidence } from "../lib/advancedEvidence";
+import { buildAdvancedEvidenceImpactSummary } from "../lib/advancedEvidenceImpact";
+import { buildAdvancedDataGateSummary } from "../lib/advancedDataGate";
+import { defaultAdvancedDataWeightControls, type AdvancedDataWeightControls } from "../lib/advancedDataWeightControls";
+import { summariseAdvancedDataCalibration } from "../lib/advancedDataCalibration";
+import { TuningPreset, cloneTuningPresets, createTuningPreset, deleteTuningPreset, updateTuningPreset } from "../lib/tuningPresets";
+import {
+  ModelChangeLogEntry,
+  appendModelChangeLogEntry,
+  createModelChangeLogEntry,
+  summariseModelChangeLog,
+} from "../lib/modelChangeLog";
 
 export default function Home() {
   type WorkspaceTab = "tip" | "evidence" | "data" | "analytics" | "competition" | "tennis";
@@ -72,9 +96,17 @@ export default function Home() {
   const [activeFixtureId, setActiveFixtureId] = useState(fixtures[0]?.id ?? "");
   const [selectedRound, setSelectedRound] = useState<string>(ALL_ROUNDS);
   const [ruleWeights, setRuleWeights] = useState<RuleWeights>(() => ({ ...defaultRuleWeights }));
+  const [sandboxRuleWeights, setSandboxRuleWeights] = useState<RuleWeights>(() => ({ ...defaultRuleWeights }));
   const [entrants, setEntrants] = useState<Entrant[]>(() => cloneEntrants(initialEntrants));
   const [userTips, setUserTips] = useState<UserTip[]>(() => cloneUserTips(initialUserTips));
   const [teamAliases, setTeamAliases] = useState<TeamAliasRule[]>(() => cloneTeamAliases(DEFAULT_TEAM_ALIAS_RULES));
+  const [tuningPresets, setTuningPresets] = useState<TuningPreset[]>([]);
+  const [modelChangeLog, setModelChangeLog] = useState<ModelChangeLogEntry[]>([]);
+  const [advancedDataControls, setAdvancedDataControls] = useState<AdvancedDataWeightControls>(() => ({ ...defaultAdvancedDataWeightControls }));
+  const [selectedModelComparisonTargetId, setSelectedModelComparisonTargetId] = useState("default");
+  const [newPresetName, setNewPresetName] = useState("Weekly review preset");
+  const [newPresetDescription, setNewPresetDescription] = useState("Tested in P31 sandbox before applying live.");
+  const [selectedCompetitionView, setSelectedCompetitionView] = useState("");
   const [csvMessage, setCsvMessage] = useState("CSV import/export has not run yet.");
   const [customCompetitionMessage, setCustomCompetitionMessage] = useState("Custom competition import has not run yet.");
   const [automationMessage, setAutomationMessage] = useState("Fixture automation has not run yet.");
@@ -113,17 +145,30 @@ export default function Home() {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const {
     activeUserEmail,
-    authEmail,
     authMessage,
+    isAdmin,
     isAuthBusy,
+    loginEmail,
+    loginPassword,
     session,
-    sendMagicLink,
-    setAuthEmail,
+    setLoginEmail,
+    setLoginPassword,
+    signInWithPassword,
     signOutOfSupabase,
   } = useSupabaseAuth(supabase);
 
   const {
+    adoptRecoverySnapshots,
+    createManualRecoverySnapshot,
+    deleteRecoverySnapshot,
+    exportRecoveryVault,
+    recoverySnapshots,
+    recoveryVaultMessage,
+    recoveryVaultSummary,
+    restoreRecoverySnapshot,
+    clearRecoveryVault,
     exportWorkspaceBackup,
+    hasLoadedSavedState,
     importWorkspaceBackup,
     lastSavedAt,
     resetWorkspaceToSamples,
@@ -137,6 +182,9 @@ export default function Home() {
     entrants,
     userTips,
     teamAliases,
+    tuningPresets,
+    modelChangeLog,
+    advancedDataControls,
     setFixtures,
     setActiveFixtureId,
     setSelectedRound,
@@ -144,21 +192,30 @@ export default function Home() {
     setEntrants,
     setUserTips,
     setTeamAliases,
+    setTuningPresets,
+    setModelChangeLog,
+    setAdvancedDataControls,
   });
 
   const {
     cloudMessage,
+    cloudMirrorStatus,
+    cloudPreviewMessage,
+    cloudPreviewState,
     cloudWorkspaceId,
     createNewCloudWorkspaceId,
     hasSupabaseConfig,
     isCloudBusy,
+    lastCloudSavedAt,
     loadWorkspaceFromCloud,
+    refreshCloudPreview,
     saveWorkspaceToCloud,
     setCloudWorkspaceId,
   } = useWorkspaceCloudSync({
     supabase,
     session,
     activeUserEmail,
+    hasLoadedSavedState,
     fixtures,
     activeFixtureId,
     selectedRound,
@@ -166,6 +223,11 @@ export default function Home() {
     entrants,
     userTips,
     teamAliases,
+    tuningPresets,
+    modelChangeLog,
+    advancedDataControls,
+    recoverySnapshots,
+    onAdoptRecoverySnapshots: adoptRecoverySnapshots,
     setFixtures,
     setActiveFixtureId,
     setSelectedRound,
@@ -173,6 +235,9 @@ export default function Home() {
     setEntrants,
     setUserTips,
     setTeamAliases,
+    setTuningPresets,
+    setModelChangeLog,
+    setAdvancedDataControls,
     setLastSavedAt,
   });
 
@@ -187,15 +252,58 @@ export default function Home() {
     form,
     odds,
     prediction: result,
+    probabilities,
     quality,
     ruleLearning,
-  } = usePredictionModel(fixtures, activeFixtureId, ruleWeights);
+    advancedDataIntegrationSummary,
+    advancedDataWeightSandboxSummary,
+  } = usePredictionModel(fixtures, activeFixtureId, ruleWeights, advancedDataControls);
 
   const roundNames = useMemo(() => {
     return Array.from(new Set(fixtures.map((fixture) => normaliseRound(fixture.round)))).sort(
       (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
     );
   }, [fixtures]);
+
+
+  const competitionNames = useMemo(() => getCompetitionNames(fixtures), [fixtures]);
+
+  useEffect(() => {
+    if (competitionNames.length === 0) return;
+    if (!selectedCompetitionView || !competitionNames.includes(selectedCompetitionView)) {
+      setSelectedCompetitionView(competitionNames[0]);
+    }
+  }, [competitionNames, selectedCompetitionView]);
+
+  const competitionInsights = useMemo(
+    () => summariseCompetition(fixtures, selectedCompetitionView || competitionNames[0] || ""),
+    [fixtures, selectedCompetitionView, competitionNames],
+  );
+
+  const competitionDataQuality = useMemo(
+    () => summariseCompetitionDataQuality(fixtures, userTips, selectedCompetitionView || competitionNames[0] || ""),
+    [fixtures, userTips, selectedCompetitionView, competitionNames],
+  );
+
+  const advancedEvidenceSummary = useMemo(
+    () => summariseAdvancedEvidence(fixtures),
+    [fixtures],
+  );
+
+  const advancedEvidenceImpactSummary = useMemo(
+    () => buildAdvancedEvidenceImpactSummary(computedFixtureResults),
+    [computedFixtureResults],
+  );
+
+  const advancedDataGateSummary = useMemo(
+    () => buildAdvancedDataGateSummary(computedFixtureResults),
+    [computedFixtureResults],
+  );
+
+  const advancedDataCalibrationSummary = useMemo(
+    () => summariseAdvancedDataCalibration(computedFixtureResults),
+    [computedFixtureResults],
+  );
 
   const visibleFixtureResults = useMemo(() => {
     if (selectedRound === ALL_ROUNDS) return computedFixtureResults;
@@ -245,6 +353,109 @@ export default function Home() {
   const evidenceAuditSummary = useMemo(
     () => summariseEvidenceAudits(visibleFixtures),
     [visibleFixtures],
+  );
+
+  const selectedRoundRuleLearning = useMemo(
+    () =>
+      calculateRuleLearningSummary(
+        visibleFixtureResults.map((item) => ({
+          prediction: item.prediction,
+          accuracy: item.accuracy,
+        })),
+      ),
+    [visibleFixtureResults],
+  );
+
+  const selectedRoundProbabilityCalibration = useMemo(() => {
+    // The P29 calibration dashboard should follow the current round filter,
+    // while the hook-level summary remains the all-fixtures workspace view.
+    const items = visibleFixtureResults.map((item) => ({
+      fixture: item.fixture,
+      probabilities: item.probabilities,
+      accuracy: item.accuracy,
+    }));
+    return summariseProbabilityCalibration(items);
+  }, [visibleFixtureResults]);
+
+  const selectedRoundModelTuning = useMemo(
+    () =>
+      summariseModelTuningRecommendations({
+        items: visibleFixtureResults.map((item) => ({
+          fixture: item.fixture,
+          prediction: item.prediction,
+          probabilities: item.probabilities,
+          accuracy: item.accuracy,
+        })),
+        calibration: selectedRoundProbabilityCalibration,
+        ruleLearning: selectedRoundRuleLearning,
+        ruleWeights,
+      }),
+    [visibleFixtureResults, selectedRoundProbabilityCalibration, selectedRoundRuleLearning, ruleWeights],
+  );
+
+  const selectedRoundTuningSandbox = useMemo(
+    () =>
+      summariseTuningSandbox({
+        fixtures: visibleFixtures,
+        baselineWeights: ruleWeights,
+        sandboxWeights: sandboxRuleWeights,
+      }),
+    [visibleFixtures, ruleWeights, sandboxRuleWeights],
+  );
+
+  const modelChangeLogSummary = useMemo(() => summariseModelChangeLog(modelChangeLog), [modelChangeLog]);
+  const modelVersionComparisonTargets = useMemo(
+    () => buildModelVersionComparisonTargets({ changeLog: modelChangeLog, presets: tuningPresets }),
+    [modelChangeLog, tuningPresets],
+  );
+  const selectedModelComparisonTarget = useMemo(
+    () => modelVersionComparisonTargets.find((target) => target.id === selectedModelComparisonTargetId) ?? modelVersionComparisonTargets[0],
+    [modelVersionComparisonTargets, selectedModelComparisonTargetId],
+  );
+  const selectedModelVersionComparison = useMemo(
+    () => summariseModelVersionComparison({
+      fixtures: visibleFixtures,
+      currentWeights: ruleWeights,
+      comparisonWeights: selectedModelComparisonTarget.weights,
+      target: selectedModelComparisonTarget,
+    }),
+    [visibleFixtures, ruleWeights, selectedModelComparisonTarget],
+  );
+
+
+  const workspaceRestoreResolverSummary = useMemo(() => {
+    const currentState = createPersistedState(
+      fixtures,
+      activeFixtureId,
+      selectedRound,
+      ruleWeights,
+      entrants,
+      userTips,
+      teamAliases,
+      tuningPresets,
+      modelChangeLog,
+      advancedDataControls,
+    );
+    const localCandidates = typeof window === "undefined" ? [] : discoverLocalWorkspaceCandidates(window.localStorage);
+    return buildWorkspaceRestoreResolverSummary({
+      currentState,
+      cloudState: cloudPreviewState,
+      localCandidates,
+      recoverySnapshots,
+    });
+  }, [fixtures, activeFixtureId, selectedRound, ruleWeights, entrants, userTips, teamAliases, tuningPresets, modelChangeLog, advancedDataControls, cloudPreviewState, recoverySnapshots]);
+
+  const releaseChecklistSummary = useMemo(
+    () => buildReleaseChecklist({
+      fixtureCount: fixtures.length,
+      competitionCount: competitionNames.length,
+      entrantCount: entrants.length,
+      aliasRuleCount: teamAliases.length,
+      tuningPresetCount: tuningPresets.length,
+      modelChangeLogCount: modelChangeLog.length,
+      hasSupabaseConfig: hasSupabaseConfig(),
+    }),
+    [fixtures.length, competitionNames.length, entrants.length, teamAliases.length, tuningPresets.length, modelChangeLog.length, hasSupabaseConfig],
   );
 
   const activeEvidenceAudit = useMemo(
@@ -431,6 +642,13 @@ export default function Home() {
     return window.confirm(`Apply ${label}? This will ${action}. Review the preview details before continuing.`);
   }
 
+  function formatImportModeLabel(mode: FixtureBatchMode) {
+    if (mode === "append") return "add/import without replacing";
+    if (mode === "update") return "update matching fixtures";
+    if (mode === "replaceCompetition") return "replace imported competition only";
+    return "replace entire workspace";
+  }
+
   function previewFixturesCsv(csv: string, mode: FixtureBatchMode) {
     const importResult = importFixturesFromCsv(csv);
     if (importResult.fixtures.length === 0) {
@@ -461,7 +679,7 @@ export default function Home() {
     setActiveFixtureId(applied.fixtures[0].id);
     setSelectedRound(normaliseRound(applied.fixtures[0].round));
     setCsvMessage(
-      `Imported ${importResult.fixtures.length} fixtures from CSV/XLSX using ${mode} mode.${describeBatchApply(applied)}${
+      `Imported ${importResult.fixtures.length} fixtures from CSV/XLSX using ${formatImportModeLabel(mode)} mode.${describeBatchApply(applied)}${
         importResult.warnings.length ? ` Warnings: ${importResult.warnings.join(" ")}` : ""
       }`,
     );
@@ -486,7 +704,7 @@ export default function Home() {
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([[...template.teamsHeaders], ...template.teamsRows]), "Teams");
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([[...template.fixturesHeaders], ...template.fixturesRows]), "Fixtures");
     XLSX.writeFile(workbook, `matchday-custom-competition-template-${new Date().toISOString().slice(0, 10)}.xlsx`);
-    setCustomCompetitionMessage("Exported Teams + Fixtures workbook template.");
+    setCustomCompetitionMessage("Exported Teams + Fixtures + Advanced Evidence workbook template.");
   }
 
   function applyCustomCompetitionImportResult(
@@ -505,7 +723,7 @@ export default function Home() {
     setActiveFixtureId(applied.fixtures[0].id);
     setSelectedRound(normaliseRound(applied.fixtures[0].round));
     setCustomCompetitionMessage(
-      `Imported ${importResult.fixtures.length} custom competition fixture${importResult.fixtures.length === 1 ? "" : "s"} from ${importResult.competitions.join(", ") || sourceLabel} using ${mode} mode. ` +
+      `Imported ${importResult.fixtures.length} custom competition fixture${importResult.fixtures.length === 1 ? "" : "s"} from ${importResult.competitions.join(", ") || sourceLabel} using ${formatImportModeLabel(mode)} mode. ` +
         `Processed ${importResult.finalRows} final result row${importResult.finalRows === 1 ? "" : "s"}, ${importResult.scheduledRows} scheduled row${importResult.scheduledRows === 1 ? "" : "s"}, and ${importResult.teams.length} team${importResult.teams.length === 1 ? "" : "s"}.` +
         describeBatchApply(applied) +
         `${importResult.warnings.length ? ` Warnings: ${importResult.warnings.join(" ")}` : ""}`,
@@ -641,7 +859,105 @@ export default function Home() {
   }
 
   function resetRuleWeights() {
+    const entry = createModelChangeLogEntry({
+      reason: "live-reset",
+      label: "Reset live weights to defaults",
+      note: "P33 audit entry created from the Rule Weight Tuning reset action.",
+      beforeWeights: ruleWeights,
+      afterWeights: defaultRuleWeights,
+    });
     setRuleWeights({ ...defaultRuleWeights });
+    setModelChangeLog((current) => appendModelChangeLogEntry(current, entry));
+  }
+
+  function updateSandboxRuleWeight(key: keyof RuleWeights, value: number) {
+    setSandboxRuleWeights((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  function copyLiveWeightsToSandbox() {
+    setSandboxRuleWeights({ ...ruleWeights });
+  }
+
+  function resetSandboxRuleWeights() {
+    setSandboxRuleWeights({ ...defaultRuleWeights });
+  }
+
+  function saveSandboxAsPreset() {
+    const preset = createTuningPreset({
+      name: newPresetName,
+      description: newPresetDescription,
+      weights: sandboxRuleWeights,
+      existingPresets: tuningPresets,
+    });
+    setTuningPresets((current) => [...current, preset]);
+    setNewPresetName(`${preset.name} copy`);
+  }
+
+  function loadPresetIntoSandbox(presetId: string) {
+    const preset = tuningPresets.find((item) => item.id === presetId);
+    if (!preset) return;
+    setSandboxRuleWeights({ ...defaultRuleWeights, ...preset.weights });
+  }
+
+  function overwritePresetFromSandbox(presetId: string) {
+    setTuningPresets((current) =>
+      updateTuningPreset({
+        presets: current,
+        presetId,
+        weights: sandboxRuleWeights,
+      }),
+    );
+  }
+
+  function removeTuningPreset(presetId: string) {
+    const preset = tuningPresets.find((item) => item.id === presetId);
+    if (!preset) return;
+    if (!window.confirm(`Delete tuning preset "${preset.name}"? This will not change live weights or sandbox weights.`)) return;
+    setTuningPresets((current) => deleteTuningPreset(current, presetId));
+  }
+
+  function applySandboxWeightsToLive() {
+    if (!window.confirm("Apply current sandbox weights to the live model? This changes Quick Prediction, analytics, and future autosaved workspace state.")) return;
+    const entry = createModelChangeLogEntry({
+      reason: "sandbox-apply",
+      label: "Applied sandbox weights to live model",
+      note: `${selectedRoundLabel} sandbox comparison: ${selectedRoundTuningSandbox.predictionChanges} prediction change(s), ${selectedRoundTuningSandbox.hitRateDelta > 0 ? "+" : ""}${selectedRoundTuningSandbox.hitRateDelta}% hit-rate delta.`,
+      beforeWeights: ruleWeights,
+      afterWeights: sandboxRuleWeights,
+    });
+    setRuleWeights({ ...sandboxRuleWeights });
+    setModelChangeLog((current) => appendModelChangeLogEntry(current, entry));
+  }
+
+  function addManualModelChangeSnapshot() {
+    const entry = createModelChangeLogEntry({
+      reason: "manual-snapshot",
+      label: "Manual live-weight snapshot",
+      note: "Snapshot recorded without changing the live model.",
+      beforeWeights: ruleWeights,
+      afterWeights: ruleWeights,
+    });
+    setModelChangeLog((current) => appendModelChangeLogEntry(current, entry));
+  }
+
+  function clearModelChangeLog() {
+    if (!window.confirm("Clear the model change log? This does not change live weights, presets, tips, or fixtures.")) return;
+    setModelChangeLog([]);
+  }
+
+  function exportTuningPresets() {
+    const blob = new Blob([JSON.stringify(cloneTuningPresets(tuningPresets), null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `matchday-tuning-presets-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   function updateEntrantName(entrantId: string, name: string) {
@@ -866,18 +1182,52 @@ export default function Home() {
     );
   }
 
+  // Gate the entire app behind sign-in. Only skip this when Supabase isn't
+  // configured at all — otherwise nobody, including the owner, would ever
+  // be able to authenticate and the app would be permanently locked out.
+  if (supabase && !isAdmin) {
+    return (
+      <AuthGatePanel
+        session={session}
+        loginEmail={loginEmail}
+        loginPassword={loginPassword}
+        authMessage={authMessage}
+        isAuthBusy={isAuthBusy}
+        onLoginEmailChange={setLoginEmail}
+        onLoginPasswordChange={setLoginPassword}
+        onSignIn={signInWithPassword}
+        onSignOut={signOutOfSupabase}
+      />
+    );
+  }
+
   return (
     <main className="container">
       <section className="header">
         <div>
-          <div className="eyebrow">Tipping Gates App · P26</div>
-          <h1>Evidence-based tipping gates with evidence readiness audits.</h1>
+          <div className="eyebrow">Tipping Gates App · P37</div>
+          <h1>Evidence-based tipping gates with release health tracking.</h1>
           <p className="lead">
-            P26 adds a team alias / name normalisation manager so weekly imports can safely handle Sao Paulo vs São Paulo, Gremio vs Grêmio and similar naming differences.
+            P37 adds a competition data-quality dashboard so imported leagues can be checked before predictions are trusted.
           </p>
         </div>
-        <button className="primary" onClick={addBlankFixture}>Add Fixture</button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+          {session && (
+            <span className="section-help" style={{ margin: 0 }}>
+              Signed in as {activeUserEmail}. <button className="link-button" onClick={signOutOfSupabase}>Sign out</button>
+            </span>
+          )}
+          <button className="primary" onClick={addBlankFixture}>Add Fixture</button>
+        </div>
       </section>
+
+      {!supabase && (
+        <section className="warning-box" style={{ marginBottom: 18 }}>
+          Supabase is not configured, so this app currently has no sign-in gate — anyone with this
+          URL has full access, including tennis predictions that consume your metered API quota.
+          Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel to require sign-in.
+        </section>
+      )}
 
       <RoundManagement
         selectedRound={selectedRound}
@@ -939,6 +1289,7 @@ export default function Home() {
                 context={context}
                 odds={odds}
                 conflict={conflict}
+                probabilities={probabilities}
                 accuracy={accuracy}
                 evidenceAudit={activeEvidenceAudit}
               />
@@ -965,6 +1316,7 @@ export default function Home() {
                 context={context}
                 odds={odds}
                 conflict={conflict}
+                probabilities={probabilities}
               />
               <OddsInputsPanel fixture={activeFixture} onUpdateOddsMarket={updateOddsMarket} />
               <ManualGateInputsPanel
@@ -984,6 +1336,22 @@ export default function Home() {
                 onExportBackup={exportWorkspaceBackup}
                 onImportBackup={importWorkspaceBackup}
                 onResetSamples={resetWorkspaceToSamples}
+              />
+              <WorkspaceRecoveryVaultPanel
+                message={recoveryVaultMessage}
+                snapshots={recoverySnapshots}
+                summary={recoveryVaultSummary}
+                onCreateSnapshot={createManualRecoverySnapshot}
+                onRestoreSnapshot={restoreRecoverySnapshot}
+                onDeleteSnapshot={deleteRecoverySnapshot}
+                onExportVault={exportRecoveryVault}
+                onClearVault={clearRecoveryVault}
+              />
+              <WorkspaceRestoreResolverPanel
+                summary={workspaceRestoreResolverSummary}
+                cloudPreviewMessage={cloudPreviewMessage}
+                isCloudBusy={isCloudBusy}
+                onRefreshCloudPreview={refreshCloudPreview}
               />
               <FixtureAutomationPanel
                 automationMessage={automationMessage}
@@ -1034,16 +1402,14 @@ export default function Home() {
                 onImportCsv={importFixturesCsv}
               />
               <CloudSyncPanel
-                authEmail={authEmail}
                 authMessage={authMessage}
                 activeUserEmail={activeUserEmail}
                 cloudWorkspaceId={cloudWorkspaceId}
                 cloudMessage={cloudMessage}
+                cloudMirrorStatus={cloudMirrorStatus}
                 isCloudBusy={isCloudBusy || isAuthBusy || !hasSupabaseConfig}
                 isSignedIn={Boolean(session)}
-                onAuthEmailChange={setAuthEmail}
-                onSendMagicLink={sendMagicLink}
-                onSignOut={signOutOfSupabase}
+                lastCloudSavedAt={lastCloudSavedAt}
                 onCloudWorkspaceIdChange={setCloudWorkspaceId}
                 onSaveCloud={saveWorkspaceToCloud}
                 onLoadCloud={loadWorkspaceFromCloud}
@@ -1054,6 +1420,7 @@ export default function Home() {
 
           {activeTab === "analytics" && (
             <>
+              <ReleaseChecklistPanel summary={releaseChecklistSummary} />
               <AccuracyDashboard
                 accuracySummary={accuracySummary}
                 selectedRoundAccuracySummary={selectedRoundAccuracySummary}
@@ -1063,7 +1430,55 @@ export default function Home() {
                 summary={evidenceAuditSummary}
                 selectedRoundLabel={selectedRoundLabel}
               />
-              <RuleLearningPanel ruleLearning={ruleLearning} />
+              <AdvancedEvidencePanel summary={advancedEvidenceSummary} />
+              <AdvancedEvidenceImpactPanel summary={advancedEvidenceImpactSummary} />
+              <AdvancedDataGatePanel summary={advancedDataGateSummary} />
+              <AdvancedDataWeightControlsPanel
+                summary={advancedDataIntegrationSummary}
+                controls={advancedDataControls}
+                onChange={setAdvancedDataControls}
+              />
+              <AdvancedDataWeightSandboxPanel summary={advancedDataWeightSandboxSummary} />
+              <AdvancedDataCalibrationPanel summary={advancedDataCalibrationSummary} />
+              <ProbabilityCalibrationPanel
+                summary={selectedRoundProbabilityCalibration}
+                selectedRoundLabel={selectedRoundLabel}
+              />
+              <ModelTuningRecommendationsPanel
+                summary={selectedRoundModelTuning}
+                selectedRoundLabel={selectedRoundLabel}
+              />
+              <TuningSandboxPanel
+                summary={selectedRoundTuningSandbox}
+                selectedRoundLabel={selectedRoundLabel}
+                ruleWeights={ruleWeights}
+                sandboxWeights={sandboxRuleWeights}
+                onUpdateSandboxWeight={updateSandboxRuleWeight}
+                onCopyLiveWeights={copyLiveWeightsToSandbox}
+                onResetSandboxWeights={resetSandboxRuleWeights}
+                onApplySandboxWeightsToLive={applySandboxWeightsToLive}
+                presets={tuningPresets}
+                newPresetName={newPresetName}
+                newPresetDescription={newPresetDescription}
+                onNewPresetNameChange={setNewPresetName}
+                onNewPresetDescriptionChange={setNewPresetDescription}
+                onSaveSandboxAsPreset={saveSandboxAsPreset}
+                onLoadPresetIntoSandbox={loadPresetIntoSandbox}
+                onOverwritePresetFromSandbox={overwritePresetFromSandbox}
+                onDeletePreset={removeTuningPreset}
+                onExportPresets={exportTuningPresets}
+                changeLogSummary={modelChangeLogSummary}
+                onAddManualSnapshot={addManualModelChangeSnapshot}
+                onClearChangeLog={clearModelChangeLog}
+              />
+              <ModelVersionComparisonPanel
+                summary={selectedModelVersionComparison}
+                targets={modelVersionComparisonTargets}
+                selectedTargetId={selectedModelComparisonTarget.id}
+                selectedRoundLabel={selectedRoundLabel}
+                onSelectedTargetChange={setSelectedModelComparisonTargetId}
+              />
+              <RuleLearningPanel ruleLearning={selectedRoundRuleLearning} />
               <RuleWeightTuningPanel
                 ruleWeights={ruleWeights}
                 quality={quality}
@@ -1076,6 +1491,13 @@ export default function Home() {
 
           {activeTab === "competition" && (
             <>
+              <CompetitionInsightsPanel
+                competitionNames={competitionNames}
+                selectedCompetition={competitionInsights.competition}
+                insights={competitionInsights}
+                onCompetitionChange={setSelectedCompetitionView}
+              />
+              <CompetitionDataQualityPanel summary={competitionDataQuality} />
               <EntrantsPicksPanel
                 fixture={activeFixture}
                 entrants={entrants}
@@ -1089,7 +1511,7 @@ export default function Home() {
             </>
           )}
 
-          {activeTab === "tennis" && <TennisQuickPredictionPanel />}
+          {activeTab === "tennis" && <TennisQuickPredictionPanel session={session} />}
         </div>
       </section>
     </main>

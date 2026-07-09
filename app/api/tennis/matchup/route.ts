@@ -5,6 +5,7 @@ import {
   fetchTennisSurfaceWinRate,
   fetchTennisHeadToHead,
 } from "../../../../lib/tennisDataClient";
+import { verifyRequestSession } from "../../../../lib/serverAuth";
 import {
   calculateQualityFromRanking,
   calculateFormFromRecentResults,
@@ -20,6 +21,10 @@ import {
 } from "../../../../lib/tennisScoringEngine";
 
 export async function POST(req: NextRequest) {
+  if (!(await verifyRequestSession(req))) {
+    return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
+  }
+
   try {
     const body = (await req.json().catch(() => ({}))) as {
       tour?: string;

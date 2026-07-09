@@ -4,6 +4,7 @@ import {
   emptyScores,
 } from "./scoringEngine";
 import { createBlankFixture, normaliseRound } from "./workspace";
+import { ADVANCED_FIXTURE_EVIDENCE_HEADERS, advancedEvidenceToFixtureRow, parseFixtureAdvancedEvidence } from "./advancedEvidenceImport";
 
 const CSV_HEADERS = [
   "competition",
@@ -53,6 +54,7 @@ const CSV_HEADERS = [
   "home_advantage",
   "head_to_head_edge",
   "other_stats_edge",
+  ...ADVANCED_FIXTURE_EVIDENCE_HEADERS,
 ] as const;
 
 type CsvHeader = (typeof CSV_HEADERS)[number];
@@ -162,6 +164,7 @@ function parseForm(value: string | undefined): Fixture["homeRecentForm"] {
 }
 
 function fixtureToRow(fixture: Fixture): string[] {
+  const advancedRow = advancedEvidenceToFixtureRow(fixture.advancedEvidence);
   return [
     fixture.competition,
     fixture.round,
@@ -210,6 +213,7 @@ function fixtureToRow(fixture: Fixture): string[] {
     fixture.scores.homeAdvantage,
     fixture.scores.headToHeadEdge,
     fixture.scores.otherStatsEdge,
+    ...ADVANCED_FIXTURE_EVIDENCE_HEADERS.map((header) => advancedRow[header] ?? ""),
   ].map(String);
 }
 
@@ -289,6 +293,7 @@ function recordToFixture(record: CsvRecord, rowNumber: number): Fixture {
       headToHeadEdge: numberCell(record, "head_to_head_edge", 0),
       otherStatsEdge: numberCell(record, "other_stats_edge", 0),
     },
+    advancedEvidence: parseFixtureAdvancedEvidence(record),
   };
 }
 

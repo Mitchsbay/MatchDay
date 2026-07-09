@@ -189,3 +189,51 @@ h1 { font-size: clamp(32px, 5vw, 56px); margin: 0 0 10px; line-height: 1.02; }
 .round-card strong { display: block; margin-bottom: 6px; }
 .round-card span { display: block; color: var(--muted); font-size: 12px; line-height: 1.45; }
 @media (max-width: 900px) { .round-summary-grid { grid-template-columns: 1fr; } }
+
+.two-column {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.field-label {
+  display: block;
+  margin: 10px 0 4px;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.preset-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.preset-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid rgba(148,163,184,.18);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(15,23,42,.35);
+}
+
+.preset-row span,
+.preset-row small {
+  display: block;
+  color: #94a3b8;
+  margin-top: 3px;
+}
+
+.compact-buttons {
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+button.danger {
+  border-color: rgba(239,68,68,.45);
+  color: #fca5a5;
+}

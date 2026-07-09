@@ -5,6 +5,16 @@ import {
   UserTip,
 } from "./sampleData";
 import { cloneTeamAliases, TeamAliasRule } from "./teamAliases";
+import { cloneAdvancedEvidence } from "./advancedEvidence";
+import { cloneTuningPresets, TuningPreset } from "./tuningPresets";
+import { cloneModelChangeLog, ModelChangeLogEntry } from "./modelChangeLog";
+import type { WorkspaceRecoverySnapshot } from "./workspaceBackupVault";
+import {
+  cloneAdvancedDataWeightControls,
+  defaultAdvancedDataWeightControls,
+  isAdvancedDataWeightControls,
+  type AdvancedDataWeightControls,
+} from "./advancedDataWeightControls";
 import {
   MatchResultInput,
   RuleWeights,
@@ -20,8 +30,29 @@ import {
 
 export const ALL_ROUNDS = "__all_rounds__";
 
-export const STORAGE_KEY = "tipping-gates-app-p26-state-v1";
+export const STORAGE_KEY = "tipping-gates-app-p47-state-v1";
 export const LEGACY_STORAGE_KEYS = [
+  "tipping-gates-app-p46-state-v1",
+  "tipping-gates-app-p44-state-v1",
+  "tipping-gates-app-p43-state-v1",
+  "tipping-gates-app-p42-state-v1",
+  "tipping-gates-app-p41-state-v1",
+  "tipping-gates-app-p40-state-v1",
+  "tipping-gates-app-p39-state-v1",
+  "tipping-gates-app-p38-state-v1",
+  "tipping-gates-app-p37-1-state-v1",
+  "tipping-gates-app-p37-state-v1",
+  "tipping-gates-app-p36-state-v1",
+  "tipping-gates-app-p35-state-v1",
+  "tipping-gates-app-p34-state-v1",
+  "tipping-gates-app-p33-state-v1",
+  "tipping-gates-app-p32-state-v1",
+  "tipping-gates-app-p31-state-v1",
+  "tipping-gates-app-p30-state-v1",
+  "tipping-gates-app-p29-state-v1",
+  "tipping-gates-app-p28-state-v1",
+  "tipping-gates-app-p27-state-v1",
+  "tipping-gates-app-p26-state-v1",
   "tipping-gates-app-p25-state-v1",
   "tipping-gates-app-p24-3-state-v1",
   "tipping-gates-app-p24-2-state-v1",
@@ -37,8 +68,29 @@ export const LEGACY_STORAGE_KEYS = [
   "tipping-gates-app-p12-state-v1",
   "tipping-gates-app-p11-state-v1",
 ];
-export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p26-cloud-workspace-id";
+export const CLOUD_WORKSPACE_ID_KEY = "tipping-gates-app-p47-cloud-workspace-id";
 export const LEGACY_CLOUD_WORKSPACE_ID_KEYS = [
+  "tipping-gates-app-p46-cloud-workspace-id",
+  "tipping-gates-app-p44-cloud-workspace-id",
+  "tipping-gates-app-p43-cloud-workspace-id",
+  "tipping-gates-app-p42-cloud-workspace-id",
+  "tipping-gates-app-p41-cloud-workspace-id",
+  "tipping-gates-app-p40-cloud-workspace-id",
+  "tipping-gates-app-p39-cloud-workspace-id",
+  "tipping-gates-app-p38-cloud-workspace-id",
+  "tipping-gates-app-p37-1-cloud-workspace-id",
+  "tipping-gates-app-p37-cloud-workspace-id",
+  "tipping-gates-app-p36-cloud-workspace-id",
+  "tipping-gates-app-p35-cloud-workspace-id",
+  "tipping-gates-app-p34-cloud-workspace-id",
+  "tipping-gates-app-p33-cloud-workspace-id",
+  "tipping-gates-app-p32-cloud-workspace-id",
+  "tipping-gates-app-p31-cloud-workspace-id",
+  "tipping-gates-app-p30-cloud-workspace-id",
+  "tipping-gates-app-p29-cloud-workspace-id",
+  "tipping-gates-app-p28-cloud-workspace-id",
+  "tipping-gates-app-p27-cloud-workspace-id",
+  "tipping-gates-app-p26-cloud-workspace-id",
   "tipping-gates-app-p25-cloud-workspace-id",
   "tipping-gates-app-p24-3-cloud-workspace-id",
   "tipping-gates-app-p24-2-cloud-workspace-id",
@@ -65,6 +117,17 @@ export type PersistedAppState = {
   entrants?: Entrant[];
   userTips?: UserTip[];
   teamAliases?: TeamAliasRule[];
+  tuningPresets?: TuningPreset[];
+  modelChangeLog?: ModelChangeLogEntry[];
+  advancedDataControls?: AdvancedDataWeightControls;
+  // Optional and type-only imported (see below) to avoid a runtime circular
+  // dependency: WorkspaceRecoverySnapshot.state is itself a PersistedAppState.
+  // Deliberately NOT populated when building the state embedded inside an
+  // individual snapshot (see createWorkspaceRecoverySnapshot call sites) —
+  // only the top-level state written to localStorage's main key or mirrored
+  // to Supabase carries the live vault, otherwise every snapshot would
+  // recursively embed a copy of the entire vault including itself.
+  recoverySnapshots?: WorkspaceRecoverySnapshot[];
 };
 
 export function normaliseRound(round: string): string {
@@ -91,6 +154,7 @@ export function cloneFixtures(fixtures: Fixture[]): Fixture[] {
     oddsMarket: { ...fixture.oddsMarket },
     matchResult: { ...fixture.matchResult },
     scores: { ...fixture.scores },
+    advancedEvidence: cloneAdvancedEvidence(fixture.advancedEvidence),
   }));
 }
 
@@ -109,8 +173,72 @@ export function isPersistedAppState(value: unknown): value is PersistedAppState 
     Array.isArray(candidate.fixtures) &&
     typeof candidate.activeFixtureId === "string" &&
     !!candidate.ruleWeights &&
-    typeof candidate.ruleWeights === "object"
+    typeof candidate.ruleWeights === "object" &&
+    (!candidate.advancedDataControls || isAdvancedDataWeightControls(candidate.advancedDataControls))
   );
+}
+
+
+export type LocalWorkspaceCandidate = {
+  key: string;
+  state: PersistedAppState;
+  fixtureCount: number;
+  competitionCount: number;
+  savedAtMs: number;
+  score: number;
+};
+
+function getStateSavedAtMs(state: PersistedAppState): number {
+  const parsed = Date.parse(state.savedAt);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getCompetitionCount(fixtures: Fixture[]): number {
+  return new Set(fixtures.map((fixture) => fixture.competition.trim()).filter(Boolean)).size;
+}
+
+export function discoverLocalWorkspaceCandidates(storage: Storage): LocalWorkspaceCandidate[] {
+  const orderedKeys = [
+    STORAGE_KEY,
+    ...LEGACY_STORAGE_KEYS,
+    ...Array.from({ length: storage.length }, (_, index) => storage.key(index) ?? "").filter(
+      (key) => key.startsWith("tipping-gates-app-") && key.includes("state"),
+    ),
+  ];
+  const uniqueKeys = Array.from(new Set(orderedKeys.filter(Boolean)));
+
+  return uniqueKeys.flatMap((key) => {
+    try {
+      const raw = storage.getItem(key);
+      if (!raw) return [];
+      const parsed: unknown = JSON.parse(raw);
+      if (!isPersistedAppState(parsed)) return [];
+      const state = parsed as PersistedAppState;
+      const fixtureCount = state.fixtures.length;
+      const competitionCount = getCompetitionCount(state.fixtures);
+      const savedAtMs = getStateSavedAtMs(state);
+      return [
+        {
+          key,
+          state,
+          fixtureCount,
+          competitionCount,
+          savedAtMs,
+          score: fixtureCount * 100 + competitionCount * 25 + Math.min(savedAtMs / 1_000_000_000_000, 10),
+        },
+      ];
+    } catch {
+      return [];
+    }
+  });
+}
+
+export function selectBestLocalWorkspaceCandidate(candidates: LocalWorkspaceCandidate[]): LocalWorkspaceCandidate | null {
+  if (candidates.length === 0) return null;
+  return [...candidates].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return b.savedAtMs - a.savedAtMs;
+  })[0] ?? null;
 }
 
 export function createPersistedState(
@@ -121,9 +249,19 @@ export function createPersistedState(
   entrants: Entrant[],
   userTips: UserTip[],
   teamAliases: TeamAliasRule[] = [],
+  tuningPresets: TuningPreset[] = [],
+  modelChangeLog: ModelChangeLogEntry[] = [],
+  advancedDataControls: AdvancedDataWeightControls = defaultAdvancedDataWeightControls,
+  // Defaults to [] on purpose: every existing call site that doesn't pass
+  // this stays exactly as before (an empty vault embedded), which is what
+  // avoids the recursive-nesting problem when this function is used to
+  // build the state embedded *inside* a single recovery snapshot. Only the
+  // two call sites that build the top-level mirrored state (local autosave
+  // write, Supabase mirror) should pass the real, current vault through.
+  recoverySnapshots: WorkspaceRecoverySnapshot[] = [],
 ): PersistedAppState {
   return {
-    version: "0.26.0",
+    version: "0.46.0",
     savedAt: new Date().toISOString(),
     fixtures: cloneFixtures(fixtures),
     activeFixtureId,
@@ -132,6 +270,10 @@ export function createPersistedState(
     entrants: cloneEntrants(entrants),
     userTips: cloneUserTips(userTips),
     teamAliases: cloneTeamAliases(teamAliases),
+    tuningPresets: cloneTuningPresets(tuningPresets),
+    modelChangeLog: cloneModelChangeLog(modelChangeLog),
+    advancedDataControls: cloneAdvancedDataWeightControls(advancedDataControls),
+    recoverySnapshots: [...recoverySnapshots],
   };
 }
 
@@ -160,6 +302,11 @@ export function createBlankFixture(round: string, competition = "New Competition
 
 export type FixtureBatchMode = "append" | "replace" | "replaceCompetition" | "update";
 
+export type FixtureBatchCompetitionPlan = {
+  competition: string;
+  existsInWorkspace: boolean;
+};
+
 export type FixtureBatchApplyResult = {
   fixtures: Fixture[];
   tips: UserTip[];
@@ -175,6 +322,9 @@ export type FixtureBatchPreview = {
   importedFixtureCount: number;
   importedCompetitionCount: number;
   importedCompetitions: string[];
+  newCompetitions: string[];
+  existingCompetitions: string[];
+  competitionPlan: FixtureBatchCompetitionPlan[];
   duplicateImportCount: number;
   matchingFixtureCount: number;
   updatedFixtureCount: number;
@@ -232,6 +382,21 @@ export function getFixtureBatchPreview(
   });
 
   const currentKeys = new Set(currentFixtures.map(fixtureMatchKey));
+  const currentCompetitionNames = new Map<string, string>();
+  currentFixtures.forEach((fixture) => {
+    const key = fixture.competition.trim().toLowerCase();
+    if (key && !currentCompetitionNames.has(key)) currentCompetitionNames.set(key, fixture.competition.trim());
+  });
+  const competitionPlan = importedCompetitions.map((competition) => ({
+    competition,
+    existsInWorkspace: currentCompetitionNames.has(competition.trim().toLowerCase()),
+  }));
+  const newCompetitions = competitionPlan
+    .filter((item) => !item.existsInWorkspace)
+    .map((item) => item.competition);
+  const existingCompetitions = competitionPlan
+    .filter((item) => item.existsInWorkspace)
+    .map((item) => currentCompetitionNames.get(item.competition.trim().toLowerCase()) || item.competition);
   const matchingFixtureCount = newFixtures.filter((fixture) => currentKeys.has(fixtureMatchKey(fixture))).length;
   const warnings: string[] = [];
   if (duplicateImportCount > 0) {
@@ -240,8 +405,16 @@ export function getFixtureBatchPreview(
   if (mode === "replace") {
     warnings.push("Replace entire workspace will remove every current fixture before importing this file.");
   }
+  if (mode === "append" && existingCompetitions.length > 0) {
+    warnings.push(`Append/Add New will add rows into existing competition scope: ${existingCompetitions.join(", ")}. Use Update or Replace imported competition only if you are refreshing that league.`);
+  }
   if (mode === "replaceCompetition") {
-    warnings.push(`Only imported competition scope will be replaced: ${importedCompetitions.join(", ") || "unknown"}.`);
+    if (existingCompetitions.length > 0) {
+      warnings.push(`Only existing imported competition scope will be replaced: ${existingCompetitions.join(", ")}.`);
+    }
+    if (newCompetitions.length > 0) {
+      warnings.push(`No existing competition found for ${newCompetitions.join(", ")}; this mode will add it without replacing other competitions.`);
+    }
   }
   if (applied.orphanedTipsCount > 0) {
     warnings.push(`${applied.orphanedTipsCount} existing tip${applied.orphanedTipsCount === 1 ? "" : "s"} would be orphaned by this import mode.`);
@@ -259,6 +432,9 @@ export function getFixtureBatchPreview(
     importedFixtureCount: newFixtures.length,
     importedCompetitionCount: importedCompetitions.length,
     importedCompetitions,
+    newCompetitions,
+    existingCompetitions,
+    competitionPlan,
     duplicateImportCount,
     matchingFixtureCount,
     updatedFixtureCount: applied.updatedFixtureCount,
@@ -273,6 +449,12 @@ export function getFixtureBatchPreview(
     summaryLines: [
       `Mode: ${modeLabel[mode]}.`,
       `Imported ${newFixtures.length} fixture${newFixtures.length === 1 ? "" : "s"} across ${importedCompetitions.length || 0} competition${importedCompetitions.length === 1 ? "" : "s"}.`,
+      newCompetitions.length > 0
+        ? `New competition${newCompetitions.length === 1 ? "" : "s"} to add: ${newCompetitions.join(", ")}.`
+        : "No brand-new competition names detected in this import.",
+      existingCompetitions.length > 0
+        ? `Existing competition${existingCompetitions.length === 1 ? "" : "s"} touched: ${existingCompetitions.join(", ")}.`
+        : "No existing competitions will be touched by competition name.",
       `Will update ${applied.updatedFixtureCount} matching fixture${applied.updatedFixtureCount === 1 ? "" : "s"}, add ${applied.addedFixtureCount} new fixture${applied.addedFixtureCount === 1 ? "" : "s"}, and preserve ${applied.preservedFixtureCount} existing fixture${applied.preservedFixtureCount === 1 ? "" : "s"}.`,
       `Workspace fixture count will change from ${currentFixtures.length} to ${applied.fixtures.length}.`,
       `Tips preserved: ${applied.tips.length}; tips at risk: ${applied.orphanedTipsCount}.`,

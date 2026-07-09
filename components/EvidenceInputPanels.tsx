@@ -151,8 +151,8 @@ function EvidenceList({ items }: { items: string[] }) {
   return <ul className="evidence-list">{items.map((item) => <li key={item}>{item}</li>)}</ul>;
 }
 
-export function GateEvidencePanels(props: { quality: any; form: any; availability: any; context: any; odds: any; conflict: any }) {
-  const { quality, form, availability, context, odds, conflict } = props;
+export function GateEvidencePanels(props: { quality: any; form: any; availability: any; context: any; odds: any; conflict: any; probabilities: any }) {
+  const { quality, form, availability, context, odds, conflict, probabilities } = props;
   return (
     <>
       <section className="card" style={{ marginBottom: 18 }}>
@@ -181,6 +181,14 @@ export function GateEvidencePanels(props: { quality: any; form: any; availabilit
         <div className="evidence-grid"><div className="mini-metric"><span>Home %</span><strong>{odds.homeProbability}%</strong></div><div className="mini-metric"><span>Draw %</span><strong>{odds.drawProbability}%</strong></div><div className="mini-metric"><span>Away %</span><strong>{odds.awayProbability}%</strong></div><div className="mini-metric"><span>Favourite</span><strong>{odds.externalFavourite}</strong></div><div className="mini-metric"><span>Margin</span><strong>{odds.favouriteMargin}</strong></div><div className="mini-metric"><span>Odds Support</span><strong>{signed(odds.oddsSupport)}</strong></div></div>
         <EvidenceList items={odds.evidence} />
         {odds.warnings.length > 0 ? <div className="warning-box slim"><strong>Odds warnings</strong><ul>{odds.warnings.map((warning: string) => <li key={warning}>{warning}</li>)}</ul></div> : null}
+      </section>
+
+      <section className="card" style={{ marginBottom: 18 }}>
+        <h3>P28 Outcome Probability Evidence</h3>
+        <p className="section-help">Estimated Home/Draw/Away probabilities are generated after the gates have run. They translate the weighted edge and conflict pressure into a clearer outcome split.</p>
+        <div className="evidence-grid"><div className="mini-metric"><span>Home</span><strong>{probabilities.home}%</strong></div><div className="mini-metric"><span>Draw</span><strong>{probabilities.draw}%</strong></div><div className="mini-metric"><span>Away</span><strong>{probabilities.away}%</strong></div><div className="mini-metric"><span>Favourite</span><strong>{probabilities.favourite}</strong></div><div className="mini-metric"><span>Spread</span><strong>{probabilities.spread}</strong></div><div className="mini-metric"><span>Band</span><strong>{probabilities.confidenceBand}</strong></div></div>
+        <EvidenceList items={probabilities.evidence} />
+        {probabilities.warnings.length > 0 ? <div className="warning-box slim"><strong>Probability warnings</strong><ul>{probabilities.warnings.map((warning: string) => <li key={warning}>{warning}</li>)}</ul></div> : null}
       </section>
       <section className="card" style={{ marginBottom: 18 }}>
         <h3>Conflict Gate Evidence</h3>

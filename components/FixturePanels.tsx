@@ -3,11 +3,12 @@
 import type { Entrant, Fixture, TipPick, UserTip } from "../lib/sampleData";
 import type { FixtureEvidenceAudit } from "../lib/evidenceAudit";
 import type { MatchResultInput } from "../lib/scoringEngine";
+import type { OutcomeProbabilities } from "../lib/probabilityModel";
 import { accuracyBadge, gateBadge, outcomeLabel, signed } from "../lib/uiFormat";
 import { getTipFor } from "../lib/workspace";
 
-export function PredictionSummaryPanel(props: { fixture: Fixture; result: any; quality: any; form: any; availability: any; context: any; odds: any; conflict: any; accuracy: any; evidenceAudit: FixtureEvidenceAudit }) {
-  const { fixture, result, quality, form, availability, context, odds, conflict, accuracy, evidenceAudit } = props;
+export function PredictionSummaryPanel(props: { fixture: Fixture; result: any; quality: any; form: any; availability: any; context: any; odds: any; conflict: any; probabilities: OutcomeProbabilities; accuracy: any; evidenceAudit: FixtureEvidenceAudit }) {
+  const { fixture, result, quality, form, availability, context, odds, conflict, probabilities, accuracy, evidenceAudit } = props;
   return (
     <section className="card" style={{ marginBottom: 18 }}>
       <h2>{fixture.homeTeam} vs {fixture.awayTeam}</h2>
@@ -21,6 +22,10 @@ export function PredictionSummaryPanel(props: { fixture: Fixture; result: any; q
         <div className="metric"><div className="label">Odds Support</div><div className="value">{signed(odds.oddsSupport)}</div></div>
         <div className="metric"><div className="label">Conflict</div><div className="value">{conflict.conflictScore}/5</div></div>
         <div className="metric"><div className="label">Confidence</div><div className="value">{result.confidence}%</div></div>
+        <div className="metric"><div className="label">Home Probability</div><div className="value">{probabilities.home}%</div></div>
+        <div className="metric"><div className="label">Draw Probability</div><div className="value">{probabilities.draw}%</div></div>
+        <div className="metric"><div className="label">Away Probability</div><div className="value">{probabilities.away}%</div></div>
+        <div className="metric"><div className="label">Probability Band</div><div className="value small-value">{probabilities.confidenceBand.toUpperCase()}</div></div>
         <div className="metric"><div className="label">Actual Outcome</div><div className="value">{outcomeLabel(accuracy.actualOutcome)}</div></div>
         <div className="metric"><div className="label">Accuracy</div><div className="value" style={{ fontSize: 15 }}>{accuracyBadge(accuracy.isCorrect, accuracy.isSettled, accuracy.isTipPublished)}</div></div>
       </div>
@@ -31,6 +36,8 @@ export function PredictionSummaryPanel(props: { fixture: Fixture; result: any; q
         <div className="metric"><div className="label">Gate Status</div><div className="value" style={{ fontSize: 15 }}>{gateBadge(result.gateStatus)}</div></div>
       </div>
       <div className="note-box"><strong>Gate logic:</strong> Quality comes from team stats, form comes from recent results, availability comes from missing-player impact, motivation comes from structured context flags, and odds support comes from external 1X2 probabilities.</div>
+      <div className="note-box"><strong>P28 probability layer:</strong> Estimated Home/Draw/Away probabilities are derived from the final weighted edge, conflict pressure and an optional 25% blend of usable external probabilities. They are heuristic model estimates, not calibrated betting odds.</div>
+      {probabilities.warnings.length > 0 ? <div className="warning-list">{probabilities.warnings.map((warning) => <div key={warning}>⚠ {warning}</div>)}</div> : null}
       <div className="warning-box slim">
         <strong>Evidence readiness:</strong> {evidenceAudit.completenessScore}% · {evidenceAudit.status.toUpperCase()} · {evidenceAudit.sourceSummary}
         {evidenceAudit.blockers.length > 0 ? <div style={{ marginTop: 8 }}>Top blocker: {evidenceAudit.blockers[0]}</div> : null}

@@ -1,3 +1,4 @@
+import type { FixtureAdvancedEvidence } from "./advancedEvidence";
 import type {
   MatchContext,
   MatchResultInput,
@@ -42,6 +43,7 @@ export type Fixture = {
   oddsMarket: OddsMarket;
   matchResult: MatchResultInput;
   scores: MatchScores;
+  advancedEvidence?: FixtureAdvancedEvidence;
 };
 
 export const fixtures: Fixture[] = [

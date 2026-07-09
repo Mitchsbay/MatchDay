@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchTennisRankings } from "../../../../lib/tennisDataClient";
+import { verifyRequestSession } from "../../../../lib/serverAuth";
 import type { TennisTour } from "../../../../lib/tennisScoringEngine";
 
 export async function GET(req: NextRequest) {
+  if (!(await verifyRequestSession(req))) {
+    return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
+  }
+
   const tourParam = req.nextUrl.searchParams.get("tour");
   const tour: TennisTour = tourParam === "wta" ? "wta" : "atp";
 

@@ -2,6 +2,8 @@ import type { Fixture } from "./sampleData";
 import type { RecentFormGame, TeamStats } from "./scoringEngine";
 import { emptyRecentForm, emptyScores } from "./scoringEngine";
 import { createBlankFixture, normaliseRound } from "./workspace";
+import type { TeamAdvancedEvidence, FixtureAdvancedEvidence } from "./advancedEvidence";
+import { ADVANCED_FIXTURE_EVIDENCE_HEADERS, ADVANCED_MATCH_EVIDENCE_HEADERS, ADVANCED_TEAM_EVIDENCE_HEADERS, parseFixtureAdvancedEvidence, parseTeamAdvancedEvidence } from "./advancedEvidenceImport";
 
 type RawRecord = Record<string, string>;
 
@@ -20,6 +22,7 @@ type ParsedRawMatch = {
   oddsSource: string;
   headToHeadEdge: number;
   otherStatsEdge: number;
+  advancedEvidence?: FixtureAdvancedEvidence;
   sourceRowNumber: number;
 };
 
@@ -47,6 +50,7 @@ const RAW_TEMPLATE_HEADERS = [
   "odds_source",
   "head_to_head_edge",
   "other_stats_edge",
+  ...ADVANCED_FIXTURE_EVIDENCE_HEADERS,
 ] as const;
 
 export const rawCompetitionCsvHeaders = RAW_TEMPLATE_HEADERS;
@@ -279,6 +283,7 @@ function recordToRawMatch(record: RawRecord, rowNumber: number): ParsedRawMatch 
     oddsSource: text(record, ["odds_source", "source"], "Raw competition import"),
     headToHeadEdge: numberValue(record, ["head_to_head_edge", "h2h_edge"]),
     otherStatsEdge: numberValue(record, ["other_stats_edge", "other_edge"]),
+    advancedEvidence: parseFixtureAdvancedEvidence(record),
     sourceRowNumber: rowNumber,
   };
 }
@@ -318,6 +323,7 @@ function rawMatchToFixture(match: ParsedRawMatch, allMatches: ParsedRawMatch[]):
       headToHeadEdge: match.headToHeadEdge,
       otherStatsEdge: match.otherStatsEdge,
     },
+    advancedEvidence: match.advancedEvidence,
   };
 }
 
@@ -350,6 +356,7 @@ const TEAM_SHEET_HEADERS = [
   "form",
   "availability_risk",
   "notes",
+  ...ADVANCED_TEAM_EVIDENCE_HEADERS,
 ] as const;
 
 const FIXTURE_SHEET_HEADERS = [
@@ -370,6 +377,7 @@ const FIXTURE_SHEET_HEADERS = [
   "head_to_head_edge",
   "other_stats_edge",
   "notes",
+  ...ADVANCED_MATCH_EVIDENCE_HEADERS,
 ] as const;
 
 export const customCompetitionTeamsSheetHeaders = TEAM_SHEET_HEADERS;
@@ -390,6 +398,7 @@ type TeamSheetRecord = {
   recentForm: RecentFormGame[];
   availabilityRisk: number;
   notes: string;
+  advancedEvidence?: TeamAdvancedEvidence;
   sourceRowNumber: number;
 };
 
@@ -460,6 +469,7 @@ function recordToTeamSheetRecord(record: RawRecord, rowNumber: number): TeamShee
     recentForm: parseRecentForm(text(record, ["form", "recent_form"])),
     availabilityRisk: numberValue(record, ["availability_risk", "injury_risk"]),
     notes: text(record, ["notes", "note"]),
+    advancedEvidence: parseTeamAdvancedEvidence(record),
     sourceRowNumber: rowNumber,
   };
 }
@@ -479,6 +489,7 @@ function fallbackTeamRecord(competition: string, season: string, team: string, r
     recentForm: emptyRecentForm.map((game) => ({ ...game })),
     availabilityRisk: 0,
     notes: "Missing from Teams sheet.",
+    advancedEvidence: undefined,
     sourceRowNumber: rowNumber,
   };
 }
@@ -508,6 +519,7 @@ function recordToFixtureSheetMatch(record: RawRecord, rowNumber: number): Parsed
     oddsSource: text(record, ["odds_source", "source"], "Teams+Fixtures workbook import"),
     headToHeadEdge: numberValue(record, ["head_to_head_edge", "h2h_edge"]),
     otherStatsEdge: numberValue(record, ["other_stats_edge", "other_edge"]),
+    advancedEvidence: parseFixtureAdvancedEvidence(record),
     sourceRowNumber: rowNumber,
   };
 }
@@ -561,6 +573,11 @@ function fixtureSheetMatchToFixture(
       headToHeadEdge: match.headToHeadEdge,
       injuryRisk: Math.max(-3, Math.min(3, homeRecord.availabilityRisk - awayRecord.availabilityRisk)),
       otherStatsEdge: match.otherStatsEdge,
+    },
+    advancedEvidence: {
+      home: homeRecord.advancedEvidence ? { ...homeRecord.advancedEvidence } : undefined,
+      away: awayRecord.advancedEvidence ? { ...awayRecord.advancedEvidence } : undefined,
+      match: match.advancedEvidence?.match ? { ...match.advancedEvidence.match } : undefined,
     },
   };
 }

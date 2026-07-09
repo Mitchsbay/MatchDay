@@ -4,6 +4,7 @@ import { ChangeEvent, useState } from "react";
 import { FREE_TIER_COMPETITIONS } from "../lib/competitions";
 import type { FixtureBatchMode, FixtureBatchPreview } from "../lib/workspace";
 import type { TeamAliasRule, TeamNameIssue } from "../lib/teamAliases";
+import type { WorkspaceRestoreResolverSummary } from "../lib/workspaceRestoreResolver";
 
 
 type ImportPreviewState = {
@@ -27,7 +28,15 @@ function ImportPreviewBox(props: {
         {props.pending.preview.summaryLines.map((line) => <li key={line}>{line}</li>)}
       </ul>
       {props.pending.preview.importedCompetitions.length > 0 && (
-        <p><strong>Competition scope:</strong> {props.pending.preview.importedCompetitions.join(", ")}</p>
+        <div className="note-box">
+          <p><strong>Competition scope:</strong> {props.pending.preview.importedCompetitions.join(", ")}</p>
+          {props.pending.preview.newCompetitions.length > 0 && (
+            <p><strong>Will add as new:</strong> {props.pending.preview.newCompetitions.join(", ")}</p>
+          )}
+          {props.pending.preview.existingCompetitions.length > 0 && (
+            <p><strong>Already exists:</strong> {props.pending.preview.existingCompetitions.join(", ")}</p>
+          )}
+        </div>
       )}
       {warnings.length > 0 && (
         <div>
@@ -36,7 +45,9 @@ function ImportPreviewBox(props: {
         </div>
       )}
       <div className="actions compact-actions">
-        <button className="primary" onClick={props.pending.apply}>Apply this import</button>
+        <button className="primary" onClick={props.pending.apply}>
+          {props.pending.mode === "append" ? "Add/import without replacing" : props.pending.mode === "update" ? "Update matching fixtures" : props.pending.mode === "replaceCompetition" ? "Replace imported competition only" : "Replace entire workspace"}
+        </button>
         <button className="secondary" onClick={props.onClear}>Cancel preview</button>
       </div>
     </div>
@@ -72,16 +83,14 @@ export function WorkspacePersistencePanel(props: {
 }
 
 export function CloudSyncPanel(props: {
-  authEmail: string;
   authMessage: string;
   activeUserEmail: string;
   cloudWorkspaceId: string;
   cloudMessage: string;
+  cloudMirrorStatus: string;
   isCloudBusy: boolean;
+  lastCloudSavedAt: string | null;
   isSignedIn: boolean;
-  onAuthEmailChange: (value: string) => void;
-  onSendMagicLink: () => void;
-  onSignOut: () => void;
   onCloudWorkspaceIdChange: (value: string) => void;
   onSaveCloud: () => void;
   onLoadCloud: () => void;
@@ -89,25 +98,25 @@ export function CloudSyncPanel(props: {
 }) {
   return (
     <section className="card" style={{ marginBottom: 18 }}>
-      <h3>P13 Supabase Auth + User-Owned Cloud Persistence</h3>
+      <h3>P13 Supabase Auth + Admin-Owned Cloud Persistence</h3>
       <p className="section-help">
-        Optional cloud sync with Supabase Auth. Add your Supabase URL and anon key as Vercel environment variables, run the SQL in <code>supabase/schema.sql</code>, then sign in and save or load this workspace by ID. Browser autosave still works even when Supabase is not configured.
+        Cloud-first workspace protection. Sign-in happens once for the whole app (see the top of the
+        page) — this panel is just for managing which cloud workspace ID your data mirrors to.
+        P38 mirrors the full workspace to Supabase and localStorage, and blocks obvious overwrites of
+        richer saved workspaces.
       </p>
-      <div className="field-row">
-        <label>Email for Supabase sign-in<input value={props.authEmail} onChange={(event) => props.onAuthEmailChange(event.target.value)} placeholder="you@example.com" /></label>
-      </div>
-      <div className="actions">
-        <button className="secondary" onClick={props.onSendMagicLink} disabled={props.isCloudBusy || props.isSignedIn}>Send magic link</button>
-        <button className="secondary" onClick={props.onSignOut} disabled={props.isCloudBusy || !props.isSignedIn}>Sign out</button>
-      </div>
       <div className="note-box">{props.authMessage}{props.activeUserEmail ? ` Cloud saves are owned by ${props.activeUserEmail}.` : ""}</div>
       <div className="field-row">
         <label>Cloud workspace ID<input value={props.cloudWorkspaceId} onChange={(event) => props.onCloudWorkspaceIdChange(event.target.value)} /></label>
       </div>
       <div className="actions">
-        <button className="secondary" onClick={props.onSaveCloud} disabled={props.isCloudBusy}>Save to Supabase</button>
-        <button className="secondary" onClick={props.onLoadCloud} disabled={props.isCloudBusy}>Load from Supabase</button>
+        <button className="secondary" onClick={props.onSaveCloud} disabled={props.isCloudBusy}>Save to Supabase now</button>
+        <button className="secondary" onClick={props.onLoadCloud} disabled={props.isCloudBusy}>Restore from Supabase</button>
         <button className="secondary" onClick={props.onNewCloudId} disabled={props.isCloudBusy}>New cloud ID</button>
+      </div>
+      <div className="result-grid compact">
+        <div className="metric"><div className="label">Cloud Mirror</div><div className="value small-value">{props.cloudMirrorStatus}</div></div>
+        <div className="metric"><div className="label">Last Cloud Save</div><div className="value small-value">{props.lastCloudSavedAt ? new Date(props.lastCloudSavedAt).toLocaleString() : "Not saved to cloud yet"}</div></div>
       </div>
       <div className="note-box">{props.cloudMessage}</div>
     </section>
@@ -244,10 +253,10 @@ export function CustomCompetitionImportPanel(props: {
         Import an unsupported league or competition from either a two-sheet Teams + Fixtures workbook or a raw results/upcoming fixtures file. A Teams + Fixtures workbook uses the Teams sheet for table evidence and the Fixtures sheet for the actual matches to create.
       </p>
       <div className="actions">
-        <button className="secondary" onClick={props.onExportWorkbookTemplate}>Export Teams + Fixtures XLSX template</button>
+        <button className="secondary" onClick={props.onExportWorkbookTemplate}>Export Teams + Fixtures + Advanced Evidence XLSX template</button>
         <button className="secondary" onClick={props.onExportTemplate}>Export raw results CSV template</button>
         <label className="secondary file-action">
-          Import raw CSV/XLSX and append
+          Add as new competition / append safely
           <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "append")} disabled={isReading} />
         </label>
         <label className="secondary file-action">
@@ -266,7 +275,7 @@ export function CustomCompetitionImportPanel(props: {
       <ImportPreviewBox pending={pendingImport} onClear={() => setPendingImport(null)} />
       <div className="note-box">{isReading ? "Reading file…" : props.message || "No custom competition import has run yet."}</div>
       <p className="section-help small-help">
-        Teams + Fixtures XLSX files must have sheets named exactly “Teams” and “Fixtures”. Raw single-sheet files still use columns: competition, round, date, home_team, away_team, home_goals, away_goals, status. Use “Replace imported competition only” when updating one league so other competitions remain untouched.
+Teams + Fixtures XLSX files must have sheets named exactly “Teams” and “Fixtures”. Use “Add as new competition / append safely” for a new league such as USL Championship. Use “Update matching fixtures” or “Replace imported competition only” only when refreshing a league that already exists. Never use “Replace entire workspace” unless you intentionally want to remove all competitions from this browser workspace.
       </p>
     </section>
   );
@@ -311,12 +320,12 @@ export function FixtureCsvPanel(props: {
     <section className="card" style={{ marginBottom: 18 }}>
       <h3>P25 Prediction-Ready CSV/XLSX Import / Export</h3>
       <p className="section-help">
-        Bulk manage rounds, fixtures, team-stat evidence, recent form, market probabilities and final scores from a spreadsheet. Export first to get the supported column template, or upload an XLSX file using those same headers.
+        Bulk manage rounds, fixtures, team-stat evidence, recent form, market probabilities, final scores, and P41 advanced evidence fields from a spreadsheet. Export first to get the supported column template, or upload an XLSX file using those same headers.
       </p>
       <div className="actions">
         <button className="secondary" onClick={props.onExportCsv}>Export fixtures CSV</button>
         <label className="secondary file-action">
-          Import CSV/XLSX and append
+          Add/import without replacing
           <input type="file" accept="text/csv,.csv,.xlsx,.xls" onChange={(event) => handleFileImport(event, "append")} disabled={isReading} />
         </label>
         <label className="secondary file-action">
@@ -561,6 +570,125 @@ export function LiveFixtureMaintenancePanel(props: {
         </div>
       ) : null}
       <div className="note-box">{props.adminMessage || "No live fixture maintenance action yet."}</div>
+    </section>
+  );
+}
+
+
+export function WorkspaceRestoreResolverPanel(props: {
+  summary: WorkspaceRestoreResolverSummary;
+  cloudPreviewMessage: string;
+  isCloudBusy: boolean;
+  onRefreshCloudPreview: () => void;
+}) {
+  return (
+    <section className="card" style={{ marginBottom: 18 }}>
+      <h3>P40 Workspace Restore Conflict Resolver</h3>
+      <p className="section-help">
+        Compare current browser data, Supabase preview, localStorage rescue copies and P39 recovery snapshots before restoring or saving over anything. This panel is read-only: use the existing cloud/vault controls to restore once you know which copy is safest.
+      </p>
+      <div className="note-box">
+        <strong>Recommendation:</strong> {props.summary.recommendedLabel}
+      </div>
+      {props.summary.warnings.length > 0 && (
+        <div className="note-box warning">
+          {props.summary.warnings.map((warning) => <div key={warning}>{warning}</div>)}
+        </div>
+      )}
+      <div className="actions">
+        <button className="secondary" onClick={props.onRefreshCloudPreview} disabled={props.isCloudBusy}>
+          {props.isCloudBusy ? "Checking cloud…" : "Refresh Supabase preview"}
+        </button>
+      </div>
+      <div className="note-box">{props.cloudPreviewMessage}</div>
+      <div className="table-wrap">
+        <table className="mini-table">
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th>Workspace</th>
+              <th>Saved</th>
+              <th>Status</th>
+              <th>Warnings</th>
+            </tr>
+          </thead>
+          <tbody>
+            {props.summary.candidates.map((candidate) => (
+              <tr key={candidate.id}>
+                <td><strong>{candidate.label}</strong><br /><span className="muted-text">{candidate.sourceType}</span></td>
+                <td>
+                  {candidate.metrics.fixtureCount} fixtures / {candidate.metrics.competitionCount} competitions / {candidate.metrics.userTipCount} tips
+                  <br />
+                  <span className="muted-text">Aliases {candidate.metrics.aliasCount} · Presets {candidate.metrics.tuningPresetCount} · Logs {candidate.metrics.modelChangeLogCount}</span>
+                </td>
+                <td>{candidate.lastUpdatedMs ? new Date(candidate.lastUpdatedMs).toLocaleString() : "Unknown"}</td>
+                <td>{candidate.recommendation}</td>
+                <td>{candidate.warnings.length ? candidate.warnings.join(" ") : "None"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+export function WorkspaceRecoveryVaultPanel(props: {
+  message: string;
+  snapshots: import("../lib/workspaceBackupVault").WorkspaceRecoverySnapshot[];
+  summary: import("../lib/workspaceBackupVault").WorkspaceRecoveryVaultSummary;
+  onCreateSnapshot: () => void;
+  onRestoreSnapshot: (snapshotId: string) => void;
+  onDeleteSnapshot: (snapshotId: string) => void;
+  onExportVault: () => void;
+  onClearVault: () => void;
+}) {
+  return (
+    <section className="card" style={{ marginBottom: 18 }}>
+      <h3>P39 Workspace Recovery Vault</h3>
+      <p className="section-help">
+        Local recovery checkpoints for accidental resets, imports, browser-key migrations or cloud/local conflicts. This is separate from Supabase mirroring and is meant to make manual competitions easier to recover.
+      </p>
+      <div className="result-grid compact">
+        <div className="metric"><div className="label">Snapshots</div><div className="value">{props.summary.snapshotCount}</div></div>
+        <div className="metric"><div className="label">Automatic</div><div className="value">{props.summary.automaticCount}</div></div>
+        <div className="metric"><div className="label">Protected</div><div className="value">{props.summary.manualCount}</div></div>
+        <div className="metric"><div className="label">Latest</div><div className="value small-value">{props.summary.latestSnapshotAt ? new Date(props.summary.latestSnapshotAt).toLocaleString() : "None yet"}</div></div>
+      </div>
+      <div className="note-box">
+        <strong>Richest saved snapshot:</strong> {props.summary.richestSnapshotLabel || "None yet"} — {props.summary.richestSnapshotDescription}
+      </div>
+      <div className="actions">
+        <button className="secondary" onClick={props.onCreateSnapshot}>Create recovery snapshot now</button>
+        <button className="secondary" onClick={props.onExportVault} disabled={props.snapshots.length === 0}>Export recovery vault</button>
+        <button className="secondary danger" onClick={props.onClearVault} disabled={props.snapshots.length === 0}>Clear vault</button>
+      </div>
+      <div className="note-box">{props.message}</div>
+      {props.snapshots.length === 0 ? (
+        <div className="note-box">No recovery snapshots yet. The app will create automatic snapshots when the workspace shape changes, and protected snapshots before reset/import/restore actions.</div>
+      ) : (
+        <div className="table-wrap">
+          <table className="mini-table">
+            <thead>
+              <tr><th>Created</th><th>Type</th><th>Label</th><th>Workspace</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              {props.snapshots.slice(0, 12).map((snapshot) => (
+                <tr key={snapshot.id}>
+                  <td>{new Date(snapshot.createdAt).toLocaleString()}</td>
+                  <td>{snapshot.reason}</td>
+                  <td><strong>{snapshot.label}</strong></td>
+                  <td>{snapshot.metrics.fixtureCount} fixtures / {snapshot.metrics.competitionCount} competitions / {snapshot.metrics.userTipCount} tips</td>
+                  <td>
+                    <button className="secondary compact-button" onClick={() => props.onRestoreSnapshot(snapshot.id)}>Restore</button>{" "}
+                    <button className="secondary compact-button danger" onClick={() => props.onDeleteSnapshot(snapshot.id)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }
