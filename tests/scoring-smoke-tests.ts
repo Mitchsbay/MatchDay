@@ -510,7 +510,11 @@ function runCompetitionFixtureFilterSmokeTests() {
   assert.ok(exampleFixtures.every((fixture) => fixture.competition === "Example League"));
 
   assert.deepEqual(fixtures.filter((fixture) => fixture.competition === "Nonexistent League"), []);
-  assert.equal(fixtures.filter((fixture) => !"" || fixture.competition === "").length, fixtures.length);
+  const noCompetitionFilter = "";
+  assert.equal(
+    fixtures.filter((fixture) => !noCompetitionFilter || fixture.competition === noCompetitionFilter).length,
+    fixtures.length,
+  );
 }
 
 function runBankrollSmokeTests() {
