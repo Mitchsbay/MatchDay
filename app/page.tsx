@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Fixture,
   FixtureBetLog,
-  TipPick,
   fixtures as initialFixtures,
 } from "../lib/sampleData";
 import {
@@ -908,6 +907,151 @@ export default function Home() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  }
+
+  function updateStats(
+    side: "homeStats" | "awayStats",
+    key: keyof TeamStats,
+    value: number,
+  ) {
+    setFixtures((current) =>
+      current.map((fixture) =>
+        fixture.id === activeFixture.id
+          ? {
+              ...fixture,
+              [side]: { ...fixture[side], [key]: Math.max(0, value) },
+            }
+          : fixture,
+      ),
+    );
+  }
+
+  function updateRecentForm(
+    side: "homeRecentForm" | "awayRecentForm",
+    index: number,
+    key: keyof RecentFormGame,
+    value: number | RecentResult,
+  ) {
+    setFixtures((current) =>
+      current.map((fixture) => {
+        if (fixture.id !== activeFixture.id) return fixture;
+        const nextForm = fixture[side].map((game, gameIndex) =>
+          gameIndex === index
+            ? {
+                ...game,
+                [key]: typeof value === "number" ? Math.max(0, value) : value,
+              }
+            : game,
+        );
+        return { ...fixture, [side]: nextForm };
+      }),
+    );
+  }
+
+  function updateMissingPlayer(
+    side: "homeMissingPlayers" | "awayMissingPlayers",
+    index: number,
+    key: keyof MissingPlayer,
+    value: string | boolean,
+  ) {
+    setFixtures((current) =>
+      current.map((fixture) => {
+        if (fixture.id !== activeFixture.id) return fixture;
+        const nextPlayers = fixture[side].map((player, playerIndex) =>
+          playerIndex === index ? { ...player, [key]: value } : player,
+        );
+        return { ...fixture, [side]: nextPlayers };
+      }),
+    );
+  }
+
+  function updateTeamContext(
+    side: "homeContext" | "awayContext",
+    key: keyof TeamContext,
+    value: boolean,
+  ) {
+    setFixtures((current) =>
+      current.map((fixture) =>
+        fixture.id === activeFixture.id
+          ? { ...fixture, [side]: { ...fixture[side], [key]: value } }
+          : fixture,
+      ),
+    );
+  }
+
+  function updateMatchContext(key: keyof MatchContext, value: boolean) {
+    setFixtures((current) =>
+      current.map((fixture) =>
+        fixture.id === activeFixture.id
+          ? {
+              ...fixture,
+              matchContext: { ...fixture.matchContext, [key]: value },
+            }
+          : fixture,
+      ),
+    );
+  }
+
+  function updateOddsMarket(key: keyof OddsMarket, value: number | string) {
+    setFixtures((current) =>
+      current.map((fixture) =>
+        fixture.id === activeFixture.id
+          ? {
+              ...fixture,
+              oddsMarket: {
+                ...fixture.oddsMarket,
+                [key]: typeof value === "number" ? Math.max(0, value) : value,
+              },
+            }
+          : fixture,
+      ),
+    );
+  }
+
+  function updateMatchResult(
+    key: keyof MatchResultInput,
+    value: number | string,
+  ) {
+    setFixtures((current) =>
+      current.map((fixture) =>
+        fixture.id === activeFixture.id
+          ? {
+              ...fixture,
+              matchResult: {
+                ...fixture.matchResult,
+                [key]: typeof value === "number" ? Math.max(0, value) : value,
+              },
+            }
+          : fixture,
+      ),
+    );
+  }
+
+  function resetFixture() {
+    const original = initialFixtures.find((fixture) => fixture.id === activeFixture.id);
+    if (!original) return;
+    setFixtures((current) =>
+      current.map((fixture) =>
+        fixture.id === activeFixture.id
+          ? {
+              ...fixture,
+              homeStats: { ...original.homeStats },
+              awayStats: { ...original.awayStats },
+              homeRecentForm: original.homeRecentForm.map((game) => ({ ...game })),
+              awayRecentForm: original.awayRecentForm.map((game) => ({ ...game })),
+              homeMissingPlayers: original.homeMissingPlayers.map((player) => ({ ...player })),
+              awayMissingPlayers: original.awayMissingPlayers.map((player) => ({ ...player })),
+              homeContext: { ...original.homeContext },
+              awayContext: { ...original.awayContext },
+              matchContext: { ...original.matchContext },
+              oddsMarket: { ...original.oddsMarket },
+              matchResult: { ...original.matchResult },
+              scores: { ...original.scores },
+              betLog: original.betLog ? { ...original.betLog } : undefined,
+            }
+          : fixture,
+      ),
+    );
   }
 
   function addBlankFixture() {
