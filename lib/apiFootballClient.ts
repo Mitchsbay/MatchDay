@@ -29,20 +29,47 @@ type ApiFootballTeamSearchResponse = {
   response: Array<{ team: { id: number; name: string } }>;
 };
 
+// football-data.org includes suffixes like "FC"/"AFC" in some team names
+// (e.g. "Charlton Athletic FC") that API-Football's own database doesn't
+// necessarily carry for the same club, and API-Football's name search isn't
+// reliably fuzzy across that difference — a search for the full string can
+// come back with zero results even though the club is definitely in their
+// database under a slightly shorter name. Stripped as a fallback, not the
+// first attempt, since some real club names end in exactly these letters on
+// purpose (e.g. "AFC Wimbledon" starts with it, not ends).
+const STRIPPABLE_SUFFIXES = [" fc", " afc", " cf"];
+
+export function stripClubSuffix(name: string): string | null {
+  const lower = name.toLowerCase();
+  const suffix = STRIPPABLE_SUFFIXES.find((s) => lower.endsWith(s));
+  if (!suffix) return null;
+  return name.slice(0, name.length - suffix.length).trim();
+}
+
+async function searchTeams(query: string): Promise<Array<{ team: { id: number; name: string } }>> {
+  const data = await getJson<ApiFootballTeamSearchResponse>(`/teams?name=${encodeURIComponent(query)}`);
+  return data.response ?? [];
+}
+
 /**
  * Resolves a team name to API-Football's own team ID. There is no shared ID
  * with football-data.org, so this is a best-effort name match: exact
  * case-insensitive match wins if present, otherwise the API's own top
- * search result. Returns null rather than throwing on no match — a team
- * API-Football doesn't recognise (naming difference, lower-tier league it
+ * search result. If the full name returns nothing, retries once with a
+ * trailing "FC"/"AFC"/"CF" stripped before giving up. Returns null rather
+ * than throwing on no match — a team API-Football doesn't recognise
+ * (naming difference beyond the suffix case, a lower-tier league it
  * doesn't cover) is an expected outcome, not a hard failure.
  */
 export async function searchTeamId(teamName: string): Promise<{ id: number; name: string } | null> {
   const trimmed = teamName.trim();
   if (!trimmed) return null;
 
-  const data = await getJson<ApiFootballTeamSearchResponse>(`/teams?name=${encodeURIComponent(trimmed)}`);
-  const results = data.response ?? [];
+  let results = await searchTeams(trimmed);
+  if (results.length === 0) {
+    const stripped = stripClubSuffix(trimmed);
+    if (stripped) results = await searchTeams(stripped);
+  }
   if (results.length === 0) return null;
 
   const exact = results.find((r) => r.team.name.toLowerCase() === trimmed.toLowerCase());

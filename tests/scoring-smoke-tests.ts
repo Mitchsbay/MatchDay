@@ -495,7 +495,7 @@ import {
   normaliseRound,
 } from "../lib/workspace";
 import { classifyWeatherRisk, resolveWeatherDisruptionRisk, type WeatherAssessment } from "../lib/weatherClient";
-import { classifyReason } from "../lib/apiFootballClient";
+import { classifyReason, stripClubSuffix } from "../lib/apiFootballClient";
 import { suggestTeamContextFlags } from "../lib/contextHeuristics";
 import {
   calculateExpectedGoals,
@@ -2566,6 +2566,12 @@ function runApiFootballSmokeTests() {
   assert.equal(classifyReason("Doubtful"), "doubtful", "type text containing 'doubt' should classify as doubtful");
   assert.equal(classifyReason("Something unexpected"), "unavailable", "unrecognised type text should fall back to unavailable");
   assert.equal(classifyReason(""), "unavailable", "empty type text should fall back to unavailable rather than throwing");
+
+  assert.equal(stripClubSuffix("Charlton Athletic FC"), "Charlton Athletic", "should strip a trailing FC suffix");
+  assert.equal(stripClubSuffix("Derby County FC"), "Derby County", "should strip a trailing FC suffix");
+  assert.equal(stripClubSuffix("Ajax AFC"), "Ajax", "should strip a trailing AFC suffix");
+  assert.equal(stripClubSuffix("AFC Wimbledon"), null, "should not strip a leading AFC that isn't a suffix");
+  assert.equal(stripClubSuffix("Arsenal"), null, "a name with no strippable suffix should return null");
 }
 
 runApiFootballSmokeTests();
