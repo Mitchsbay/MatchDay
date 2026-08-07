@@ -482,6 +482,13 @@ export default function Home() {
       setLiveFixturesMessage(
         `Fetched ${result.fixtures.length} live fixtures using ${mode} mode.${result.warnings.length ? ` Warnings: ${result.warnings.join(" ")}` : ""}`,
       );
+    } catch (err) {
+      // Without this catch, a failed fetch (e.g. Supabase not configured,
+      // or the live_fixtures cache being unreachable) used to fail as an
+      // unhandled promise rejection — the button looked like it did
+      // nothing at all, with no visible error anywhere.
+      const message = err instanceof Error ? err.message : "Unknown error fetching live fixtures.";
+      setLiveFixturesMessage(`Fetch failed: ${message}`);
     } finally {
       setIsLoadingLiveFixtures(false);
     }
@@ -651,13 +658,18 @@ export default function Home() {
   }
 
   async function exportCustomWorkbookTemplate() {
-    const XLSX = await import("xlsx");
-    const template = getCustomWorkbookTemplate();
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([[...template.teamsHeaders], ...template.teamsRows]), "Teams");
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([[...template.fixturesHeaders], ...template.fixturesRows]), "Fixtures");
-    XLSX.writeFile(workbook, `matchday-custom-competition-template-${new Date().toISOString().slice(0, 10)}.xlsx`);
-    setCustomCompetitionMessage("Exported Teams + Fixtures + Advanced Evidence workbook template.");
+    try {
+      const XLSX = await import("xlsx");
+      const template = getCustomWorkbookTemplate();
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([[...template.teamsHeaders], ...template.teamsRows]), "Teams");
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([[...template.fixturesHeaders], ...template.fixturesRows]), "Fixtures");
+      XLSX.writeFile(workbook, `matchday-custom-competition-template-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      setCustomCompetitionMessage("Exported Teams + Fixtures + Advanced Evidence workbook template.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error exporting the workbook template.";
+      setCustomCompetitionMessage(`Export failed: ${message}`);
+    }
   }
 
   function applyCustomCompetitionImportResult(
@@ -1145,6 +1157,14 @@ export default function Home() {
         </section>
       )}
 
+      {fixtures.length === 0 && (
+        <section className="note-box" style={{ marginBottom: 18 }}>
+          No fixtures yet. Head to the <strong>Data &amp; Import</strong> tab to import a CSV/XLSX,
+          fetch live fixtures, or generate a round robin — or click <strong>Add Fixture</strong>{" "}
+          above for a single blank one.
+        </section>
+      )}
+
       <nav className="workspace-tabs">
         <button className={activeTab === "tip" ? "workspace-tab active" : "workspace-tab"} onClick={() => setActiveTab("tip")}>
           Tip Now
@@ -1240,6 +1260,7 @@ export default function Home() {
                 scores={activeFixture.scores}
                 onUpdateScore={updateScore}
                 onResetFixture={resetFixture}
+                canResetFixture={initialFixtures.some((fixture) => fixture.id === activeFixture.id)}
               />
             </>
           )}

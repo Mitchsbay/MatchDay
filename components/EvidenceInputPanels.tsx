@@ -202,7 +202,7 @@ export function GateEvidencePanels(props: { quality: any; form: any; availabilit
   );
 }
 
-export function ManualGateInputsPanel(props: { scores: MatchScores; onUpdateScore: (key: keyof MatchScores, value: number) => void; onResetFixture: () => void }) {
+export function ManualGateInputsPanel(props: { scores: MatchScores; onUpdateScore: (key: keyof MatchScores, value: number) => void; onResetFixture: () => void; canResetFixture: boolean }) {
   return (
     <section className="card" style={{ marginBottom: 18 }}>
       <h3>Remaining Manual Gate Inputs</h3>
@@ -212,7 +212,14 @@ export function ManualGateInputsPanel(props: { scores: MatchScores; onUpdateScor
           <input className="score-input" type="number" min={definition.min} max={definition.max} step={1} value={props.scores[definition.key]} onChange={(event) => props.onUpdateScore(definition.key, Number(event.target.value))} />
         </div>
       ))}
-      <div className="actions"><button className="secondary" onClick={props.onResetFixture}>Reset selected fixture</button></div>
+      <div className="actions">
+        <button className="secondary" onClick={props.onResetFixture} disabled={!props.canResetFixture}>Reset selected fixture</button>
+        {!props.canResetFixture && (
+          <span className="section-help" style={{ marginLeft: 8 }}>
+            Only available for fixtures loaded from the (now-empty) bundled example set.
+          </span>
+        )}
+      </div>
     </section>
   );
 }

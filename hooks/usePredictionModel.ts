@@ -14,8 +14,43 @@ import {
   calculateQualityFromTeamStats,
   calculateResultAccuracy,
   calculateRuleLearningSummary,
+  emptyMatchContext,
+  emptyMatchResult,
+  emptyMissingPlayers,
+  emptyOddsMarket,
+  emptyRecentForm,
+  emptyScores,
+  emptyTeamContext,
+  emptyTeamStats,
   runPrediction,
 } from "../lib/scoringEngine";
+
+// Used only when the workspace has zero fixtures (e.g. right after clearing
+// the example data, before anything's been imported yet). Every field is a
+// harmless empty/zero value from scoringEngine's existing `empty*`
+// constants — this fixture is never actually shown; it just keeps the
+// calculation pipeline below from touching `undefined` and throwing, so the
+// hook can still return *something* while the UI shows an empty state.
+const PLACEHOLDER_FIXTURE: Fixture = {
+  id: "__no-fixtures-placeholder__",
+  competition: "",
+  round: "",
+  date: "",
+  homeTeam: "",
+  awayTeam: "",
+  homeStats: emptyTeamStats,
+  awayStats: emptyTeamStats,
+  homeRecentForm: emptyRecentForm,
+  awayRecentForm: emptyRecentForm,
+  homeMissingPlayers: emptyMissingPlayers,
+  awayMissingPlayers: emptyMissingPlayers,
+  homeContext: emptyTeamContext,
+  awayContext: emptyTeamContext,
+  matchContext: emptyMatchContext,
+  oddsMarket: emptyOddsMarket,
+  matchResult: emptyMatchResult,
+  scores: emptyScores,
+};
 import { calculateOutcomeProbabilities } from "../lib/probabilityModel";
 import { calculateFixturePoissonProbabilities } from "../lib/expectedGoalsModel";
 import { summariseProbabilityCalibration } from "../lib/probabilityCalibration";
@@ -121,7 +156,7 @@ export function usePredictionModel(
   ruleWeights: RuleWeights,
   advancedDataControls?: Partial<AdvancedDataWeightControls>,
 ) {
-  const activeFixture = fixtures.find((fixture) => fixture.id === activeFixtureId) ?? fixtures[0];
+  const activeFixture = fixtures.find((fixture) => fixture.id === activeFixtureId) ?? fixtures[0] ?? PLACEHOLDER_FIXTURE;
 
   const activePrediction = useMemo(
     () => calculateFixturePrediction(activeFixture, ruleWeights, advancedDataControls, fixtures),
