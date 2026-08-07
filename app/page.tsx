@@ -1094,11 +1094,18 @@ export default function Home() {
   }
 
   async function suggestAvailability() {
+    if (!session) {
+      setAvailabilitySuggestionMessage("Sign in to get availability suggestions.");
+      return;
+    }
     setIsSuggestingAvailability(true);
     try {
       const response = await fetch("/api/availability/suggest", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({ homeTeam: activeFixture.homeTeam, awayTeam: activeFixture.awayTeam }),
       });
       const payload = await response.json().catch(() => ({}));
