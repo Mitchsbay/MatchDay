@@ -46,8 +46,23 @@ export function stripClubSuffix(name: string): string | null {
   return name.slice(0, name.length - suffix.length).trim();
 }
 
+// "Club Atlético de Madrid" (football-data.org's official long-form name)
+// vs whatever shorter/unaccented form API-Football files the same club
+// under is a different problem from the FC/AFC suffix case — no suffix to
+// strip, just an accented character that may not match their stored name.
+// Unicode NFD normalisation splits an accented letter into the base letter
+// plus a separate combining-accent codepoint, which the regex then strips.
+export function stripDiacritics(name: string): string | null {
+  const stripped = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return stripped !== name ? stripped : null;
+}
+
 async function searchTeams(query: string): Promise<Array<{ team: { id: number; name: string } }>> {
-  const data = await getJson<ApiFootballTeamSearchResponse>(`/teams?name=${encodeURIComponent(query)}`);
+  // `search` does a looser partial match (API-Football's own docs example:
+  // search=manches finds Manchester clubs); `name` is closer to an exact
+  // match and is what was silently failing on things like the FC-suffix
+  // and long-form-name cases this function now works around.
+  const data = await getJson<ApiFootballTeamSearchResponse>(`/teams?search=${encodeURIComponent(query)}`);
   return data.response ?? [];
 }
 
@@ -55,26 +70,34 @@ async function searchTeams(query: string): Promise<Array<{ team: { id: number; n
  * Resolves a team name to API-Football's own team ID. There is no shared ID
  * with football-data.org, so this is a best-effort name match: exact
  * case-insensitive match wins if present, otherwise the API's own top
- * search result. If the full name returns nothing, retries once with a
- * trailing "FC"/"AFC"/"CF" stripped before giving up. Returns null rather
- * than throwing on no match — a team API-Football doesn't recognise
- * (naming difference beyond the suffix case, a lower-tier league it
- * doesn't cover) is an expected outcome, not a hard failure.
+ * search result. Tries the full name first, then a de-duplicated set of
+ * fallback variants (suffix stripped, diacritics stripped, both) before
+ * giving up. Returns null rather than throwing on no match — a team
+ * API-Football doesn't recognise (naming difference deeper than these
+ * fallbacks cover, a lower-tier league it doesn't cover) is an expected
+ * outcome, not a hard failure.
  */
 export async function searchTeamId(teamName: string): Promise<{ id: number; name: string } | null> {
   const trimmed = teamName.trim();
   if (!trimmed) return null;
 
-  let results = await searchTeams(trimmed);
-  if (results.length === 0) {
-    const stripped = stripClubSuffix(trimmed);
-    if (stripped) results = await searchTeams(stripped);
-  }
-  if (results.length === 0) return null;
+  const suffixStripped = stripClubSuffix(trimmed);
+  const diacriticsStripped = stripDiacritics(trimmed);
+  const both = suffixStripped ? stripDiacritics(suffixStripped) : null;
 
-  const exact = results.find((r) => r.team.name.toLowerCase() === trimmed.toLowerCase());
-  const match = exact ?? results[0];
-  return { id: match.team.id, name: match.team.name };
+  const candidates = [trimmed, suffixStripped, diacriticsStripped, both].filter(
+    (candidate, index, all): candidate is string => Boolean(candidate) && all.indexOf(candidate) === index,
+  );
+
+  for (const candidate of candidates) {
+    const results = await searchTeams(candidate);
+    if (results.length === 0) continue;
+    const exact = results.find((r) => r.team.name.toLowerCase() === trimmed.toLowerCase());
+    const match = exact ?? results[0];
+    return { id: match.team.id, name: match.team.name };
+  }
+
+  return null;
 }
 
 type ApiFootballInjuryResponse = {

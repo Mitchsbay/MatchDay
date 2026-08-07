@@ -495,7 +495,7 @@ import {
   normaliseRound,
 } from "../lib/workspace";
 import { classifyWeatherRisk, resolveWeatherDisruptionRisk, type WeatherAssessment } from "../lib/weatherClient";
-import { classifyReason, stripClubSuffix } from "../lib/apiFootballClient";
+import { classifyReason, stripClubSuffix, stripDiacritics } from "../lib/apiFootballClient";
 import { suggestTeamContextFlags } from "../lib/contextHeuristics";
 import {
   calculateExpectedGoals,
@@ -2572,6 +2572,10 @@ function runApiFootballSmokeTests() {
   assert.equal(stripClubSuffix("Ajax AFC"), "Ajax", "should strip a trailing AFC suffix");
   assert.equal(stripClubSuffix("AFC Wimbledon"), null, "should not strip a leading AFC that isn't a suffix");
   assert.equal(stripClubSuffix("Arsenal"), null, "a name with no strippable suffix should return null");
+
+  assert.equal(stripDiacritics("Club Atlético de Madrid"), "Club Atletico de Madrid", "should strip the accent from Atlético");
+  assert.equal(stripDiacritics("Bayern München"), "Bayern Munchen", "should strip the umlaut from München");
+  assert.equal(stripDiacritics("Arsenal"), null, "a name with no diacritics should return null");
 }
 
 runApiFootballSmokeTests();
