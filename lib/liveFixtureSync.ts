@@ -3,6 +3,7 @@ import {
   fetchUpcomingMatches,
   fetchRecentFormForTeams,
   type TeamStatsById,
+  type TeamStandingsById,
 } from "./footballDataClient";
 import { getSupabaseServiceRoleClient } from "./supabaseServerClient";
 
@@ -42,14 +43,16 @@ export async function syncLiveFixtures(
   // Team stats come from a standings table, which some competitions don't
   // have at all (e.g. a knockout-stage World Cup has no single league table).
   // A failure here shouldn't block fixtures/form, which are independent —
-  // fall back to an empty map so every team just gets the emptyStats default.
-  const [teamStatsById, upcomingMatches] = await Promise.all([
-    fetchTeamStatsForCompetition(competitionCode).catch((err): TeamStatsById => {
+  // fall back to empty maps so every team just gets the emptyStats default
+  // and no standings context (context-flag suggestions simply won't be
+  // available for that fixture, same as any other unavailable data).
+  const [{ statsById: teamStatsById, standingsById }, upcomingMatches] = await Promise.all([
+    fetchTeamStatsForCompetition(competitionCode).catch((err): { statsById: TeamStatsById; standingsById: TeamStandingsById } => {
       console.warn(
         `[live-fixtures] Could not fetch team stats for ${competitionCode}, continuing with blank stats:`,
         err instanceof Error ? err.message : err,
       );
-      return new Map();
+      return { statsById: new Map(), standingsById: new Map() };
     }),
     fetchUpcomingMatches(competitionCode, daysAhead),
   ]);
@@ -77,26 +80,38 @@ export async function syncLiveFixtures(
   function recentFormFor(id: number | null) {
     return (id !== null ? recentFormById.get(id) : undefined) ?? [];
   }
+  function standingsFor(id: number | null) {
+    return (id !== null ? standingsById.get(id) : undefined) ?? null;
+  }
 
-  const rows = upcomingMatches.map((match) => ({
-    id: String(match.id),
-    // `competition` is the free-text display name shown in the UI;
-    // `competition_code` (see supabase/schema.sql) is the stable code the
-    // dropdowns actually filter by — these are deliberately two different
-    // columns, not the same value twice.
-    competition: match.competitionName,
-    competition_code: competitionCode,
-    round: match.matchday ? `Matchday ${match.matchday}` : null,
-    match_date: match.utcDate,
-    home_team: match.homeTeam.name ?? "TBD",
-    away_team: match.awayTeam.name ?? "TBD",
-    home_stats: statsFor(match.homeTeam.id),
-    away_stats: statsFor(match.awayTeam.id),
-    home_recent_form: recentFormFor(match.homeTeam.id),
-    away_recent_form: recentFormFor(match.awayTeam.id),
-    status: "SCHEDULED",
-    updated_at: fetchedAt,
-  }));
+  const rows = upcomingMatches.map((match) => {
+    const homeStandings = standingsFor(match.homeTeam.id);
+    const awayStandings = standingsFor(match.awayTeam.id);
+    return {
+      id: String(match.id),
+      // `competition` is the free-text display name shown in the UI;
+      // `competition_code` (see supabase/schema.sql) is the stable code the
+      // dropdowns actually filter by — these are deliberately two different
+      // columns, not the same value twice.
+      competition: match.competitionName,
+      competition_code: competitionCode,
+      round: match.matchday ? `Matchday ${match.matchday}` : null,
+      match_date: match.utcDate,
+      home_team: match.homeTeam.name ?? "TBD",
+      away_team: match.awayTeam.name ?? "TBD",
+      home_stats: statsFor(match.homeTeam.id),
+      away_stats: statsFor(match.awayTeam.id),
+      home_recent_form: recentFormFor(match.homeTeam.id),
+      away_recent_form: recentFormFor(match.awayTeam.id),
+      home_league_position: homeStandings?.position ?? null,
+      away_league_position: awayStandings?.position ?? null,
+      // Both sides are in the same competition/group, so total_teams is the
+      // same for both — stored once per row rather than per side.
+      total_teams_in_table: homeStandings?.totalTeams ?? awayStandings?.totalTeams ?? null,
+      status: "SCHEDULED",
+      updated_at: fetchedAt,
+    };
+  });
 
   if (rows.length > 0) {
     const supabase = getSupabaseServiceRoleClient();

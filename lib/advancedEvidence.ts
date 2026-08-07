@@ -46,6 +46,9 @@ export type MatchAdvancedEvidence = {
   venueCountry?: string;
   kickoffUtc?: string;
   weatherDetail?: string;
+  homeLeaguePosition?: number;
+  awayLeaguePosition?: number;
+  totalTeamsInTable?: number;
   dataSourceLabel?: string;
   notes?: string;
 };

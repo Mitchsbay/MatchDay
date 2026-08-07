@@ -495,6 +495,8 @@ import {
   normaliseRound,
 } from "../lib/workspace";
 import { classifyWeatherRisk, resolveWeatherDisruptionRisk, type WeatherAssessment } from "../lib/weatherClient";
+import { classifyReason } from "../lib/apiFootballClient";
+import { suggestTeamContextFlags } from "../lib/contextHeuristics";
 import {
   calculateExpectedGoals,
   calculateFixturePoissonProbabilities,
@@ -2558,9 +2560,48 @@ function runExpectedGoalsModelSmokeTests() {
 
 runExpectedGoalsModelSmokeTests();
 
+function runApiFootballSmokeTests() {
+  assert.equal(classifyReason("Suspended"), "suspension", "type text containing 'suspen' should classify as suspension");
+  assert.equal(classifyReason("Hamstring Injury"), "injury", "type text containing 'injur' should classify as injury");
+  assert.equal(classifyReason("Doubtful"), "doubtful", "type text containing 'doubt' should classify as doubtful");
+  assert.equal(classifyReason("Something unexpected"), "unavailable", "unrecognised type text should fall back to unavailable");
+  assert.equal(classifyReason(""), "unavailable", "empty type text should fall back to unavailable rather than throwing");
+}
+
+runApiFootballSmokeTests();
+
+function runContextHeuristicsSmokeTests() {
+  const leader = suggestTeamContextFlags({ position: 1, totalTeams: 20 });
+  assert.equal(leader.flags.titleRace, true, "1st of 20 should suggest title race");
+  assert.equal(leader.flags.relegationBattle, undefined, "1st of 20 should not suggest relegation battle");
+  assert.equal(leader.flags.chasingFinalsOrEurope, undefined, "1st of 20 should not also suggest chasing Europe (title race already covers it)");
+
+  const european = suggestTeamContextFlags({ position: 5, totalTeams: 20 });
+  assert.equal(european.flags.chasingFinalsOrEurope, true, "5th of 20 should suggest chasing Europe");
+  assert.equal(european.flags.titleRace, undefined, "5th of 20 should not suggest title race");
+
+  const midTable = suggestTeamContextFlags({ position: 12, totalTeams: 20 });
+  assert.equal(midTable.flags.alreadyQualifiedOrSafe, true, "12th of 20 should suggest safe mid-table");
+  assert.equal(midTable.flags.relegationBattle, undefined, "12th of 20 should not suggest relegation battle");
+  assert.equal(midTable.flags.titleRace, undefined, "12th of 20 should not suggest title race");
+
+  const bottom = suggestTeamContextFlags({ position: 20, totalTeams: 20 });
+  assert.equal(bottom.flags.relegationBattle, true, "last of 20 should suggest relegation battle");
+  assert.equal(bottom.flags.alreadyQualifiedOrSafe, undefined, "last of 20 should not suggest safe mid-table");
+
+  const smallLeague = suggestTeamContextFlags({ position: 13, totalTeams: 16 });
+  assert.equal(smallLeague.flags.relegationBattle, true, "bottom-4 band should still apply to a smaller 16-team league");
+
+  const invalid = suggestTeamContextFlags({ position: 0, totalTeams: 0 });
+  assert.deepEqual(invalid.flags, {}, "invalid position/totalTeams should suggest no flags at all");
+  assert.equal(invalid.reasoning.length, 1, "invalid position/totalTeams should explain why nothing was suggested");
+}
+
+runContextHeuristicsSmokeTests();
+
 (async () => {
   await runServerAuthSmokeTests();
-  console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, custom competition import, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns, import previews, team aliases, competition insights, P28 outcome probabilities, P29 probability calibration, P30 model tuning recommendations, P31 tuning sandbox, P32 tuning presets, P33 model change log, P34 model version comparison, P36-P40 release checklist, P37 data quality, P38 workspace preservation, P39 recovery vault, P40 restore resolver, P41/P42 advanced evidence schema/imports, P43 advanced evidence impact signals, P44 advanced data gate, P45 advanced data calibration, P46 advanced data weight controls, P47 advanced data weight sandbox, P48 automatic weather risk assessment, P49 expected-goals/Dixon-Coles Poisson model, server-side auth gate and tennis scoring engine.");
+  console.log("Smoke tests passed: scoring, gates, results, learning, workspace helpers, CSV import/export, custom competition import, fixture automation, live fixtures mapping, evidence audit, live fixture maintenance, quick prediction dropdowns, import previews, team aliases, competition insights, P28 outcome probabilities, P29 probability calibration, P30 model tuning recommendations, P31 tuning sandbox, P32 tuning presets, P33 model change log, P34 model version comparison, P36-P40 release checklist, P37 data quality, P38 workspace preservation, P39 recovery vault, P40 restore resolver, P41/P42 advanced evidence schema/imports, P43 advanced evidence impact signals, P44 advanced data gate, P45 advanced data calibration, P46 advanced data weight controls, P47 advanced data weight sandbox, P48 automatic weather risk assessment, P49 expected-goals/Dixon-Coles Poisson model, P50 API-Football availability suggestions and context-flag heuristics, server-side auth gate and tennis scoring engine.");
 })().catch((err) => {
   console.error(err);
   process.exit(1);

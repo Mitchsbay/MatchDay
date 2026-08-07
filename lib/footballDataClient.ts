@@ -49,6 +49,7 @@ function sleep(ms: number) {
 
 type StandingsTeam = {
   team: { id: number; name: string };
+  position: number;
   playedGames: number;
   won: number;
   draw: number;
@@ -68,42 +69,58 @@ type StandingsResponse = {
 
 export type TeamStatsById = Map<number, TeamStatsLike>;
 
-export async function fetchTeamStatsForCompetition(competitionCode: string): Promise<TeamStatsById> {
+// Position/totalTeams are kept separate from TeamStatsById rather than
+// added onto TeamStatsLike: TeamStats is used pervasively across the
+// scoring engine and tests, and standings context (needed only for the
+// context-flag heuristics) has no business rippling through all of that.
+// A group-stage tournament's "position" is only meaningful within its own
+// group, so totalTeams is per-group-table size, not the whole competition.
+export type TeamStandingsContext = { position: number; totalTeams: number };
+export type TeamStandingsById = Map<number, TeamStandingsContext>;
+
+export async function fetchTeamStatsForCompetition(
+  competitionCode: string,
+): Promise<{ statsById: TeamStatsById; standingsById: TeamStandingsById }> {
   const data = await getJson<StandingsResponse>(`/competitions/${competitionCode}/standings`);
 
   // .filter + flatMap rather than .find: a group-stage tournament has one
   // "TOTAL" entry per group, and .find() would silently grab only the first
   // group, leaving every team from every other group with blank stats.
-  const total = data.standings.filter((s) => s.type === "TOTAL").flatMap((s) => s.table);
+  const totalTables = data.standings.filter((s) => s.type === "TOTAL");
+  const total = totalTables.flatMap((s) => s.table);
   const home = data.standings.filter((s) => s.type === "HOME").flatMap((s) => s.table);
   const away = data.standings.filter((s) => s.type === "AWAY").flatMap((s) => s.table);
 
   const homeById = new Map(home.map((row) => [row.team.id, row]));
   const awayById = new Map(away.map((row) => [row.team.id, row]));
 
-  const result: TeamStatsById = new Map();
-  for (const row of total) {
-    const homeRow = homeById.get(row.team.id);
-    const awayRow = awayById.get(row.team.id);
-    result.set(row.team.id, {
-      played: row.playedGames,
-      points: row.points,
-      wins: row.won,
-      draws: row.draw,
-      losses: row.lost,
-      goalsFor: row.goalsFor,
-      goalsAgainst: row.goalsAgainst,
-      homePlayed: homeRow?.playedGames ?? 0,
-      homePoints: homeRow?.points ?? 0,
-      homeGoalsFor: homeRow?.goalsFor ?? 0,
-      homeGoalsAgainst: homeRow?.goalsAgainst ?? 0,
-      awayPlayed: awayRow?.playedGames ?? 0,
-      awayPoints: awayRow?.points ?? 0,
-      awayGoalsFor: awayRow?.goalsFor ?? 0,
-      awayGoalsAgainst: awayRow?.goalsAgainst ?? 0,
-    });
+  const statsById: TeamStatsById = new Map();
+  const standingsById: TeamStandingsById = new Map();
+  for (const table of totalTables) {
+    for (const row of table.table) {
+      const homeRow = homeById.get(row.team.id);
+      const awayRow = awayById.get(row.team.id);
+      statsById.set(row.team.id, {
+        played: row.playedGames,
+        points: row.points,
+        wins: row.won,
+        draws: row.draw,
+        losses: row.lost,
+        goalsFor: row.goalsFor,
+        goalsAgainst: row.goalsAgainst,
+        homePlayed: homeRow?.playedGames ?? 0,
+        homePoints: homeRow?.points ?? 0,
+        homeGoalsFor: homeRow?.goalsFor ?? 0,
+        homeGoalsAgainst: homeRow?.goalsAgainst ?? 0,
+        awayPlayed: awayRow?.playedGames ?? 0,
+        awayPoints: awayRow?.points ?? 0,
+        awayGoalsFor: awayRow?.goalsFor ?? 0,
+        awayGoalsAgainst: awayRow?.goalsAgainst ?? 0,
+      });
+      standingsById.set(row.team.id, { position: row.position, totalTeams: table.table.length });
+    }
   }
-  return result;
+  return { statsById, standingsById };
 }
 
 // --- Upcoming fixtures -------------------------------------------------------

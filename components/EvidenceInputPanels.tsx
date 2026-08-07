@@ -70,7 +70,13 @@ export function RecentFormInputsPanel(props: { fixture: Fixture; onUpdateRecentF
   );
 }
 
-export function AvailabilityInputsPanel(props: { fixture: Fixture; onUpdateMissingPlayer: (side: "homeMissingPlayers" | "awayMissingPlayers", index: number, key: keyof MissingPlayer, value: string | boolean) => void }) {
+export function AvailabilityInputsPanel(props: {
+  fixture: Fixture;
+  onUpdateMissingPlayer: (side: "homeMissingPlayers" | "awayMissingPlayers", index: number, key: keyof MissingPlayer, value: string | boolean) => void;
+  onSuggestAvailability: () => void;
+  isSuggestingAvailability: boolean;
+  availabilitySuggestionMessage: string;
+}) {
   const renderPlayers = (side: "homeMissingPlayers" | "awayMissingPlayers", teamName: string) => (
     <div className="availability-panel">
       <h4>{teamName}</h4>
@@ -94,11 +100,28 @@ export function AvailabilityInputsPanel(props: { fixture: Fixture; onUpdateMissi
         {renderPlayers("homeMissingPlayers", props.fixture.homeTeam)}
         {renderPlayers("awayMissingPlayers", props.fixture.awayTeam)}
       </div>
+      <div className="actions">
+        <button className="secondary" onClick={props.onSuggestAvailability} disabled={props.isSuggestingAvailability}>
+          {props.isSuggestingAvailability ? "Checking API-Football…" : "Suggest availability from API-Football"}
+        </button>
+      </div>
+      <p className="section-help" style={{ marginTop: -6 }}>
+        Fills empty slots only — never overwrites a slot you&apos;ve already typed into. Confirms who&apos;s
+        out; importance and starter status are still your call.
+      </p>
+      <div className="note-box">{props.availabilitySuggestionMessage}</div>
     </section>
   );
 }
 
-export function ContextInputsPanel(props: { fixture: Fixture; onUpdateTeamContext: (side: "homeContext" | "awayContext", key: keyof TeamContext, value: boolean) => void; onUpdateMatchContext: (key: keyof MatchContext, value: boolean) => void }) {
+export function ContextInputsPanel(props: {
+  fixture: Fixture;
+  onUpdateTeamContext: (side: "homeContext" | "awayContext", key: keyof TeamContext, value: boolean) => void;
+  onUpdateMatchContext: (key: keyof MatchContext, value: boolean) => void;
+  onSuggestContextFlags: () => void;
+  contextSuggestionAvailable: boolean;
+  contextSuggestionMessage: string;
+}) {
   const renderTeamContext = (side: "homeContext" | "awayContext", teamName: string) => (
     <div className="context-panel">
       <h4>{teamName}</h4>
@@ -128,6 +151,17 @@ export function ContextInputsPanel(props: { fixture: Fixture; onUpdateTeamContex
           ))}
         </div>
       </div>
+      <div className="actions">
+        <button className="secondary" onClick={props.onSuggestContextFlags} disabled={!props.contextSuggestionAvailable}>
+          Suggest title race / relegation flags from table position
+        </button>
+      </div>
+      <p className="section-help" style={{ marginTop: -6 }}>
+        {props.contextSuggestionAvailable
+          ? "Only sets flags on, based on rough table-position bands (top 3 / bottom 4 / 4th\u20137th) \u2014 never unticks anything, and doesn't account for each league's actual promotion/relegation/European qualification format. Review before relying on it."
+          : "Only available for fixtures pulled in via live fetch \u2014 there's no table position to work from for a CSV, custom-imported, or generated fixture."}
+      </p>
+      {props.contextSuggestionMessage && <div className="note-box">{props.contextSuggestionMessage}</div>}
     </section>
   );
 }

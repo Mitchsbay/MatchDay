@@ -39,6 +39,7 @@ import { BankrollPanel } from "../components/BankrollPanel";
 import { AuthGatePanel } from "../components/AuthGatePanel";
 import { TennisQuickPredictionPanel } from "../components/TennisPanels";
 import { TeamStrengthInputsPanel, RecentFormInputsPanel, AvailabilityInputsPanel, ContextInputsPanel, OddsInputsPanel, GateEvidencePanels, ManualGateInputsPanel, PredictionGatesPanel } from "../components/EvidenceInputPanels";
+import { suggestTeamContextFlags } from "../lib/contextHeuristics";
 import {
   ALL_ROUNDS,
   applyFixtureBatch,
@@ -111,6 +112,11 @@ export default function Home() {
   const [liveFixtureAdminMessage, setLiveFixtureAdminMessage] = useState("Live fixture maintenance has not run yet.");
   const [liveFixtureAdminStatus, setLiveFixtureAdminStatus] = useState<LiveFixtureAdminStatus | null>(null);
   const [isLiveFixtureAdminBusy, setIsLiveFixtureAdminBusy] = useState(false);
+  const [isSuggestingAvailability, setIsSuggestingAvailability] = useState(false);
+  const [availabilitySuggestionMessage, setAvailabilitySuggestionMessage] = useState(
+    "Availability suggestions have not been requested yet.",
+  );
+  const [contextSuggestionMessage, setContextSuggestionMessage] = useState("");
 
   useEffect(() => {
     const remembered = loadRememberedAdminSecret();
@@ -1061,6 +1067,62 @@ export default function Home() {
     );
   }
 
+  // Only fills slots the user hasn't already typed a name into — an
+  // API-Football suggestion should never silently overwrite a manual entry.
+  // Returns how many slots it actually filled, computed from the pre-update
+  // snapshot so it's accurate even under React StrictMode's double-invoked
+  // updaters.
+  function applyMissingPlayerSuggestions(
+    side: "homeMissingPlayers" | "awayMissingPlayers",
+    suggestions: MissingPlayer[],
+  ): number {
+    const currentPlayers = activeFixture[side];
+    const filledCount = currentPlayers.filter((player, index) => !player.name.trim() && suggestions[index]).length;
+    setFixtures((current) =>
+      current.map((fixture) =>
+        fixture.id === activeFixture.id
+          ? {
+              ...fixture,
+              [side]: fixture[side].map((player, index) =>
+                player.name.trim() || !suggestions[index] ? player : { ...suggestions[index] },
+              ),
+            }
+          : fixture,
+      ),
+    );
+    return filledCount;
+  }
+
+  async function suggestAvailability() {
+    setIsSuggestingAvailability(true);
+    try {
+      const response = await fetch("/api/availability/suggest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ homeTeam: activeFixture.homeTeam, awayTeam: activeFixture.awayTeam }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || `Availability suggestion failed with HTTP ${response.status}`);
+      }
+
+      const homeFilled = applyMissingPlayerSuggestions("homeMissingPlayers", payload.home ?? []);
+      const awayFilled = applyMissingPlayerSuggestions("awayMissingPlayers", payload.away ?? []);
+      const warnings: string[] = payload.warnings ?? [];
+
+      setAvailabilitySuggestionMessage(
+        `Filled ${homeFilled} home and ${awayFilled} away slot(s) from API-Football. Existing entries were left untouched.${
+          warnings.length ? ` Notes: ${warnings.join(" ")}` : ""
+        } Importance, expected-starter status and exact reason are worth double-checking — the feed only confirms who's out, not how much it matters.`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error fetching availability suggestions.";
+      setAvailabilitySuggestionMessage(message);
+    } finally {
+      setIsSuggestingAvailability(false);
+    }
+  }
+
   function updateTeamContext(
     side: "homeContext" | "awayContext",
     key: keyof TeamContext,
@@ -1085,6 +1147,34 @@ export default function Home() {
             }
           : fixture,
       ),
+    );
+  }
+
+  function suggestContextFlags() {
+    const homePosition = activeFixture.advancedEvidence?.match?.homeLeaguePosition;
+    const awayPosition = activeFixture.advancedEvidence?.match?.awayLeaguePosition;
+    const totalTeams = activeFixture.advancedEvidence?.match?.totalTeamsInTable;
+    if (homePosition === undefined || awayPosition === undefined || totalTeams === undefined) {
+      setContextSuggestionMessage("No table position available for this fixture — nothing to suggest from.");
+      return;
+    }
+
+    const homeSuggestion = suggestTeamContextFlags({ position: homePosition, totalTeams });
+    const awaySuggestion = suggestTeamContextFlags({ position: awayPosition, totalTeams });
+
+    (Object.keys(homeSuggestion.flags) as Array<keyof TeamContext>).forEach((key) => {
+      if (homeSuggestion.flags[key]) updateTeamContext("homeContext", key, true);
+    });
+    (Object.keys(awaySuggestion.flags) as Array<keyof TeamContext>).forEach((key) => {
+      if (awaySuggestion.flags[key]) updateTeamContext("awayContext", key, true);
+    });
+
+    const notes = [
+      ...homeSuggestion.reasoning.map((r) => `${activeFixture.homeTeam}: ${r}`),
+      ...awaySuggestion.reasoning.map((r) => `${activeFixture.awayTeam}: ${r}`),
+    ];
+    setContextSuggestionMessage(
+      notes.length > 0 ? notes.join(" ") : "No context flags suggested from table position for either side.",
     );
   }
 
@@ -1302,11 +1392,24 @@ export default function Home() {
             <>
               <TeamStrengthInputsPanel fixture={activeFixture} onUpdateStats={updateStats} />
               <RecentFormInputsPanel fixture={activeFixture} onUpdateRecentForm={updateRecentForm} />
-              <AvailabilityInputsPanel fixture={activeFixture} onUpdateMissingPlayer={updateMissingPlayer} />
+              <AvailabilityInputsPanel
+                fixture={activeFixture}
+                onUpdateMissingPlayer={updateMissingPlayer}
+                onSuggestAvailability={suggestAvailability}
+                isSuggestingAvailability={isSuggestingAvailability}
+                availabilitySuggestionMessage={availabilitySuggestionMessage}
+              />
               <ContextInputsPanel
                 fixture={activeFixture}
                 onUpdateTeamContext={updateTeamContext}
                 onUpdateMatchContext={updateMatchContext}
+                onSuggestContextFlags={suggestContextFlags}
+                contextSuggestionAvailable={
+                  activeFixture.advancedEvidence?.match?.homeLeaguePosition !== undefined &&
+                  activeFixture.advancedEvidence?.match?.awayLeaguePosition !== undefined &&
+                  activeFixture.advancedEvidence?.match?.totalTeamsInTable !== undefined
+                }
+                contextSuggestionMessage={contextSuggestionMessage}
               />
               <GateEvidencePanels
                 quality={quality}

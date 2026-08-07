@@ -19,6 +19,9 @@ export type LiveFixtureRow = {
   away_stats: TeamStats;
   home_recent_form: RecentFormGame[];
   away_recent_form: RecentFormGame[];
+  home_league_position: number | null;
+  away_league_position: number | null;
+  total_teams_in_table: number | null;
 };
 
 export type LiveFixturesFetchResult = {
@@ -46,6 +49,8 @@ function formatMatchDate(iso: string): string {
 // stays fully user-editable, exactly like a CSV-imported or generated fixture.
 export function mapLiveFixtureRow(row: LiveFixtureRow): Fixture {
   const blank = createBlankFixture(row.round ?? "Imported Round", row.competition);
+  const hasStandingsContext =
+    row.home_league_position !== null && row.away_league_position !== null && row.total_teams_in_table !== null;
   return {
     ...blank,
     id: row.id,
@@ -58,6 +63,17 @@ export function mapLiveFixtureRow(row: LiveFixtureRow): Fixture {
     awayStats: row.away_stats,
     homeRecentForm: row.home_recent_form,
     awayRecentForm: row.away_recent_form,
+    advancedEvidence: hasStandingsContext
+      ? {
+          ...blank.advancedEvidence,
+          match: {
+            ...blank.advancedEvidence?.match,
+            homeLeaguePosition: row.home_league_position!,
+            awayLeaguePosition: row.away_league_position!,
+            totalTeamsInTable: row.total_teams_in_table!,
+          },
+        }
+      : blank.advancedEvidence,
   };
 }
 

@@ -86,6 +86,14 @@ create table if not exists public.live_fixtures (
 alter table public.live_fixtures add column if not exists competition_code text;
 create index if not exists live_fixtures_competition_code_idx on public.live_fixtures (competition_code);
 
+-- P50: standings context for the context-flag heuristics (title race /
+-- relegation battle suggestions). Nullable — competitions without a normal
+-- league table (World Cup knockout rounds, etc.) simply have no position to
+-- store, same as season stats already being blank for those.
+alter table public.live_fixtures add column if not exists home_league_position integer;
+alter table public.live_fixtures add column if not exists away_league_position integer;
+alter table public.live_fixtures add column if not exists total_teams_in_table integer;
+
 create index if not exists live_fixtures_match_date_idx on public.live_fixtures (match_date);
 create index if not exists live_fixtures_competition_idx on public.live_fixtures (competition);
 
