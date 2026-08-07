@@ -30,7 +30,7 @@ import { useWorkspaceAutosave } from "../hooks/useWorkspaceAutosave";
 import { useWorkspaceCloudSync } from "../hooks/useWorkspaceCloudSync";
 import { FixtureList } from "../components/FixtureList";
 import { RoundManagement } from "../components/RoundManagement";
-import { WorkspacePersistencePanel, WorkspaceRecoveryVaultPanel, WorkspaceRestoreResolverPanel, CloudSyncPanel, CustomCompetitionImportPanel, FixtureCsvPanel, FixtureAutomationPanel, LiveFixturesPanel, LiveFixtureMaintenancePanel, TeamAliasManagerPanel, type LiveFixtureAdminStatus } from "../components/WorkspacePanels";
+import { WorkspacePersistencePanel, WorkspaceRecoveryVaultPanel, WorkspaceRestoreResolverPanel, CloudSyncPanel, CustomCompetitionImportPanel, FixtureCsvPanel, FixtureAutomationPanel, LiveFixturesPanel, TeamAliasManagerPanel, type LiveFixtureAdminStatus } from "../components/WorkspacePanels";
 import { AccuracyDashboard, AdvancedDataCalibrationPanel, AdvancedDataGatePanel, AdvancedDataWeightControlsPanel, AdvancedDataWeightSandboxPanel, AdvancedEvidenceImpactPanel, AdvancedEvidencePanel, CompetitionDataQualityPanel, CompetitionInsightsPanel, EvidenceReadinessPanel, ModelTuningRecommendationsPanel, ModelVersionComparisonPanel, ProbabilityCalibrationPanel, ReleaseChecklistPanel, RuleLearningPanel, RuleWeightTuningPanel, TuningSandboxPanel } from "../components/DashboardPanels";
 import { PredictionSummaryPanel, FixtureDetailsPanel, ResultInputsPanel } from "../components/FixturePanels";
 import { QuickPredictionPanel } from "../components/QuickPredictionPanel";
@@ -108,7 +108,6 @@ export default function Home() {
   const [isLoadingLiveFixtures, setIsLoadingLiveFixtures] = useState(false);
   const [liveFixtureAdminSecret, setLiveFixtureAdminSecret] = useState("");
   const [rememberAdminSecret, setRememberAdminSecret] = useState(false);
-  const [liveFixtureAdminCompetition, setLiveFixtureAdminCompetition] = useState("PL");
   const [liveFixtureAdminMessage, setLiveFixtureAdminMessage] = useState("Live fixture maintenance has not run yet.");
   const [liveFixtureAdminStatus, setLiveFixtureAdminStatus] = useState<LiveFixtureAdminStatus | null>(null);
   const [isLiveFixtureAdminBusy, setIsLiveFixtureAdminBusy] = useState(false);
@@ -543,7 +542,7 @@ export default function Home() {
               authorization: `Bearer ${liveFixtureAdminSecret.trim()}`,
               "content-type": "application/json",
             },
-            body: JSON.stringify({ action, competition: liveFixtureAdminCompetition }),
+            body: JSON.stringify({ action, competition: liveFixturesCompetition }),
           });
 
       const payload = await response.json().catch(() => ({}));
@@ -567,6 +566,69 @@ export default function Home() {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown live fixture maintenance error.";
+      setLiveFixtureAdminMessage(message);
+    } finally {
+      setIsLiveFixtureAdminBusy(false);
+    }
+  }
+
+  // Merges the two previously-separate steps (P22's cache refresh, then
+  // P21's cache-into-workspace pull) into one action behind one competition
+  // selector. This still needs the admin/cron secret — that part is
+  // unavoidable, since refreshing means calling football-data.org, which
+  // only the admin route is authorized to do — but the person using this
+  // app no longer has to keep two dropdowns in sync by hand to get from
+  // "stale cache" to "fixtures in front of me."
+  async function refreshAndFetchLiveFixtures(mode: "append" | "replace") {
+    if (!liveFixtureAdminSecret.trim()) {
+      setLiveFixtureAdminMessage("Enter the admin / cron secret before refreshing live fixtures.");
+      return;
+    }
+
+    if (mode === "replace") {
+      const confirmed = window.confirm(
+        "Replace mode deletes every fixture currently in this workspace and swaps in the live fixture list instead. " +
+          "Export a JSON backup first if this is a real competition. Continue?",
+      );
+      if (!confirmed) return;
+    }
+
+    setIsLiveFixtureAdminBusy(true);
+    try {
+      const response = await fetch("/api/admin/live-fixtures", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${liveFixtureAdminSecret.trim()}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ action: "refresh", competition: liveFixturesCompetition }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || `Refresh failed with HTTP ${response.status}`);
+      }
+      const refresh = payload.refresh;
+      const refreshSummary = `Refreshed cache: upserted ${refresh?.fixturesUpserted ?? 0} fixtures, processed ${refresh?.teamsProcessed ?? 0} teams.`;
+
+      const fetchResult = await fetchLiveFixtures(supabase, liveFixturesCompetition);
+      if (fetchResult.fixtures.length === 0) {
+        setLiveFixtureAdminMessage(
+          `${refreshSummary} ${fetchResult.warnings.join(" ") || "No fixtures were returned from the cache."}`,
+        );
+        return;
+      }
+
+      const applied = applyFixtureBatch(fetchResult.fixtures, fixtures, mode);
+      setFixtures(applied.fixtures);
+      setActiveFixtureId(applied.fixtures[0].id);
+      setSelectedRound(normaliseRound(applied.fixtures[0].round));
+      setLiveFixtureAdminMessage(
+        `${refreshSummary} Added ${fetchResult.fixtures.length} fixtures to your workspace using ${mode} mode.${
+          fetchResult.warnings.length ? ` Warnings: ${fetchResult.warnings.join(" ")}` : ""
+        }`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error refreshing and fetching live fixtures.";
       setLiveFixtureAdminMessage(message);
     } finally {
       setIsLiveFixtureAdminBusy(false);
@@ -1296,24 +1358,17 @@ export default function Home() {
                 onGenerateFixtures={generateAutomatedFixtures}
               />
               <LiveFixturesPanel
-                liveFixturesMessage={liveFixturesMessage}
-                isLoadingLiveFixtures={isLoadingLiveFixtures}
-                competition={liveFixturesCompetition}
-                onCompetitionChange={setLiveFixturesCompetition}
-                onFetchLiveFixtures={loadLiveFixtures}
-              />
-              <LiveFixtureMaintenancePanel
                 adminSecret={liveFixtureAdminSecret}
                 adminMessage={liveFixtureAdminMessage}
                 adminStatus={liveFixtureAdminStatus}
                 isAdminBusy={isLiveFixtureAdminBusy}
-                competition={liveFixtureAdminCompetition}
+                competition={liveFixturesCompetition}
                 rememberAdminSecret={rememberAdminSecret}
                 onAdminSecretChange={handleAdminSecretChange}
                 onRememberAdminSecretChange={handleRememberAdminSecretChange}
-                onCompetitionChange={setLiveFixtureAdminCompetition}
+                onCompetitionChange={setLiveFixturesCompetition}
+                onRefreshAndFetch={refreshAndFetchLiveFixtures}
                 onCheckStatus={() => runLiveFixtureAdminAction("status")}
-                onRefreshNow={() => runLiveFixtureAdminAction("refresh")}
                 onCleanupOldFixtures={() => runLiveFixtureAdminAction("cleanup")}
               />
               <TeamAliasManagerPanel

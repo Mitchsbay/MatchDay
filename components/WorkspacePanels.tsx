@@ -415,59 +415,6 @@ export function FixtureAutomationPanel(props: {
   );
 }
 
-export function LiveFixturesPanel(props: {
-  liveFixturesMessage: string;
-  isLoadingLiveFixtures: boolean;
-  competition: string;
-  onCompetitionChange: (value: string) => void;
-  onFetchLiveFixtures: (mode: "append" | "replace") => void;
-}) {
-  const handleFetch = (mode: "append" | "replace") => {
-    if (mode === "replace") {
-      const confirmed = window.confirm(
-        "Replace mode deletes every fixture currently in this workspace and swaps in the live fixture list instead. " +
-          "" +
-          "Export a JSON backup first if this is a real competition. Continue?"
-      );
-      if (!confirmed) return;
-    }
-    props.onFetchLiveFixtures(mode);
-  };
-
-  return (
-    <section className="card" style={{ marginBottom: 18 }}>
-      <h3>P21 Live Fixtures (football-data.org)</h3>
-      <p className="section-help">
-        Pull real upcoming fixtures, season stats and recent form for the selected competition from
-        the shared cache (populated by a scheduled cron job). Odds, match results, missing players
-        and manual gate scores aren&apos;t available from this source, so those stay blank and
-        editable, same as a CSV-imported or generated fixture. Note: tournaments without a normal
-        league table (e.g. World Cup knockout rounds) may return fixtures and recent form but little
-        or no season-stats data.
-      </p>
-      <div className="field-row">
-        <label>
-          Competition (filters which cached rows to pull in)
-          <select value={props.competition} onChange={(event) => props.onCompetitionChange(event.target.value)}>
-            {FREE_TIER_COMPETITIONS.map((option) => (
-              <option key={option.code} value={option.code}>{option.name} ({option.code})</option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <div className="actions">
-        <button className="secondary" onClick={() => handleFetch("append")} disabled={props.isLoadingLiveFixtures}>
-          {props.isLoadingLiveFixtures ? "Loading…" : "Fetch live fixtures and append"}
-        </button>
-        <button className="secondary danger" onClick={() => handleFetch("replace")} disabled={props.isLoadingLiveFixtures}>
-          Fetch live fixtures and replace
-        </button>
-      </div>
-      <div className="note-box">{props.liveFixturesMessage || "Live fixtures have not been fetched yet."}</div>
-    </section>
-  );
-}
-
 export type LiveFixtureAdminStatus = {
   totalRows: number;
   futureRows: number;
@@ -485,7 +432,7 @@ function formatAdminDate(value: string | null): string {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 }
 
-export function LiveFixtureMaintenancePanel(props: {
+export function LiveFixturesPanel(props: {
   adminSecret: string;
   adminMessage: string;
   adminStatus: LiveFixtureAdminStatus | null;
@@ -495,15 +442,24 @@ export function LiveFixtureMaintenancePanel(props: {
   onAdminSecretChange: (value: string) => void;
   onRememberAdminSecretChange: (remember: boolean) => void;
   onCompetitionChange: (value: string) => void;
+  onRefreshAndFetch: (mode: "append" | "replace") => void;
   onCheckStatus: () => void;
-  onRefreshNow: () => void;
   onCleanupOldFixtures: () => void;
 }) {
+  const handleRefreshAndFetch = (mode: "append" | "replace") => {
+    props.onRefreshAndFetch(mode);
+  };
+
   return (
     <section className="card" style={{ marginBottom: 18 }}>
-      <h3>P22 Live Fixture Maintenance</h3>
+      <h3>P21/P22 Live Fixtures (football-data.org)</h3>
       <p className="section-help">
-        Admin-only controls for the shared live-fixture cache. Enter the same secret used for <code>CRON_SECRET</code> to check cache status, refresh fixtures immediately or delete stale rows. The service-role key stays server-side only.
+        Pull real upcoming fixtures, season stats and recent form for the selected competition. This
+        first refreshes the shared cache from football-data.org, then adds the result to your
+        workspace — one action instead of two. Odds, match results, missing players and manual gate
+        scores aren&apos;t available from this source, so those stay blank and editable, same as a
+        CSV-imported or generated fixture. Note: tournaments without a normal league table (e.g. World
+        Cup knockout rounds) may return fixtures and recent form but little or no season-stats data.
       </p>
       <div className="field-row">
         <label>Admin / cron secret
@@ -514,7 +470,7 @@ export function LiveFixtureMaintenancePanel(props: {
             placeholder="CRON_SECRET"
           />
         </label>
-        <label>Competition to refresh
+        <label>Competition
           <select value={props.competition} onChange={(event) => props.onCompetitionChange(event.target.value)}>
             {FREE_TIER_COMPETITIONS.map((option) => (
               <option key={option.code} value={option.code}>{option.name} ({option.code})</option>
@@ -549,11 +505,25 @@ export function LiveFixtureMaintenancePanel(props: {
         </p>
       )}
       <div className="actions">
-        <button className="secondary" onClick={props.onCheckStatus} disabled={props.isAdminBusy || !props.adminSecret.trim()}>
-          {props.isAdminBusy ? "Working…" : "Check cache status"}
+        <button
+          className="secondary"
+          onClick={() => handleRefreshAndFetch("append")}
+          disabled={props.isAdminBusy || !props.adminSecret.trim()}
+        >
+          {props.isAdminBusy ? "Working…" : "Refresh and fetch fixtures"}
         </button>
-        <button className="secondary" onClick={props.onRefreshNow} disabled={props.isAdminBusy || !props.adminSecret.trim()}>
-          Refresh live fixtures now
+        <button
+          className="secondary danger"
+          onClick={() => handleRefreshAndFetch("replace")}
+          disabled={props.isAdminBusy || !props.adminSecret.trim()}
+        >
+          Refresh and replace fixtures
+        </button>
+      </div>
+      <p className="section-help">Maintenance-only, doesn&apos;t touch your workspace:</p>
+      <div className="actions">
+        <button className="secondary" onClick={props.onCheckStatus} disabled={props.isAdminBusy || !props.adminSecret.trim()}>
+          Check cache status
         </button>
         <button className="secondary danger" onClick={props.onCleanupOldFixtures} disabled={props.isAdminBusy || !props.adminSecret.trim()}>
           Clean old live fixtures
@@ -569,7 +539,7 @@ export function LiveFixtureMaintenancePanel(props: {
           <div className="metric"><div className="label">Newest Match</div><div className="value small-value">{formatAdminDate(props.adminStatus.newestMatchDate)}</div></div>
         </div>
       ) : null}
-      <div className="note-box">{props.adminMessage || "No live fixture maintenance action yet."}</div>
+      <div className="note-box">{props.adminMessage || "Live fixtures have not been refreshed yet."}</div>
     </section>
   );
 }
